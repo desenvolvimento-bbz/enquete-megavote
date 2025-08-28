@@ -1,0 +1,30 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs e caches
+*.log
+*.cache
+cache/
+logs/
+
+# Node (se usar)
+node_modules/
+npm-debug.log*
+
+# Composer (se um dia usar)
+vendor/
+
+# Env / segredos
+.env
+.env.*
+!.env.example
+
+# Docker volumes locais (se tiver mapeados)
+docker-data/
+db_data/
+
+# Uploads (se criar depois)
+public/uploads/

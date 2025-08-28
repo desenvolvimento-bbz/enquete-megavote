@@ -1,0 +1,51 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: poll-app-db
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: poll_app
+      MYSQL_USER: poll_user
+      MYSQL_PASSWORD: poll_pass
+    ports:
+      # Porta HOST 3307 -> porta INTERNA 3306 do MySQL
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-prootpass"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - dbdata:/var/lib/mysql
+      - ./schema:/docker-entrypoint-initdb.d:ro
+      # (opcional) coloque seu schema.sql nessa pasta para subir automático
+      # - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
+
+  app:
+    build: .
+    container_name: poll-app-app
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306        # SEMPRE a porta interna do MySQL
+      DB_NAME: poll_app
+      DB_USER: poll_user
+      DB_PASS: poll_pass
+    ports:
+      - "8080:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    # (opcional em dev)
+    # volumes:
+    #   - .:/var/www/html
+
+  adminer:
+    image: adminer:4
+    container_name: poll-app-adminer
+    depends_on:
+      - db
+    ports:
+      - "8081:8080"
+
+volumes:
+  dbdata:

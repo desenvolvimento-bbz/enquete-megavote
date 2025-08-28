@@ -1,0 +1,28 @@
+:root{
+  --primary:#60A33D;
+  --primary-700:#166434;
+  --gray-700:#53554A;
+}
+
+/* Bootstrap overrides (básico) */
+.bg-primary{ background-color: var(--primary)!important; }
+.btn-primary{
+  --bs-btn-bg: var(--primary);
+  --bs-btn-border-color: var(--primary);
+  --bs-btn-hover-bg: var(--primary-700);
+  --bs-btn-hover-border-color: var(--primary-700);
+}
+.btn-outline-primary{
+  --bs-btn-color: var(--primary);
+  --bs-btn-border-color: var(--primary);
+  --bs-btn-hover-bg: var(--primary);
+  --bs-btn-hover-border-color: var(--primary);
+  --bs-btn-hover-color: #fff;
+}
+
+.table thead th{ background:#f6f7f5; }
+.card{ border-radius: .5rem; }
+.badge-ok{ background:#e8f5e9; color:#2e7d32; }
+.badge-off{ background:#ffebee; color:#c62828; }
+
+.text-gray{ color: var(--gray-700); }
