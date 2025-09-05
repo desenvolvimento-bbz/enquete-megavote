@@ -32,7 +32,7 @@ if (isset($_SESSION['role'])) {
 <body>
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
   <div class="container">
-    <a class="navbar-brand fw-semibold" href="<?= $homeHref ?>">Megavote Enquetes</a>
+    <a class="navbar-brand fw-semibold" href="<?= $homeHref ?>">Serviços MegaVote</a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#topnav">
       <span class="navbar-toggler-icon"></span>
     </button>

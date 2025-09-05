@@ -164,3 +164,22 @@ CREATE TABLE IF NOT EXISTS votes (
 -- INSERT INTO users (username,email,password,role)
 -- VALUES ('admin','admin@example.com','$2y$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx','admin');
 -- (A senha acima deve ser um hash bcrypt gerado por password_hash)
+
+-- ============================================
+-- Tabela de logs de acesso (admin/basics/etc.)
+-- Usada por auth/logout.php e pode ser usada em outros pontos
+-- ============================================
+CREATE TABLE IF NOT EXISTS access_logs (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id     INT NULL,
+  role        VARCHAR(30) NULL,
+  action      VARCHAR(64) NOT NULL,
+  ip_address  VARCHAR(64) NULL,
+  user_agent  TEXT NULL,
+  page        VARCHAR(255) NULL,
+  meta        JSON NULL,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE INDEX IF NOT EXISTS idx_access_logs_created_at ON access_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_access_logs_user_role ON access_logs(user_id, role);

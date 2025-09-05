@@ -1,4 +1,4 @@
-<?php
+    <?php
 // config/db.php
 
 // Lê variáveis de ambiente (Docker) com fallback para dev local (XAMPP)

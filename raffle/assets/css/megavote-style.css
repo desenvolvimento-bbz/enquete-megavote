@@ -1,0 +1,562 @@
+/* ===========================
+   MEGAVOTE - SISTEMA DE SORTEIO
+   Estilo Moderno baseado no site oficial
+   =========================== */
+
+/* Importação de fonte moderna */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* ===========================
+   VARIÁVEIS CSS - PALETA MEGAVOTE
+   =========================== */
+:root {
+  /* Cores principais da Megavote */
+  --megavote-primary: #60a33d;
+  --megavote-primary-dark: #166434;
+  --megavote-primary-light: #86efac;
+  --megavote-primary-lighter: #dcfce7;
+  
+  /* Cores complementares */
+  --megavote-blue: #6b7280;
+  --megavote-blue-dark: #4b5563;
+  
+  /* Cores neutras */
+  --megavote-gray-900: #111827;
+  --megavote-gray-800: #1f2937;
+  --megavote-gray-700: #374151;
+  --megavote-gray-600: #4b5563;
+  --megavote-gray-500: #6b7280;
+  --megavote-gray-400: #9ca3af;
+  --megavote-gray-300: #d1d5db;
+  --megavote-gray-200: #e5e7eb;
+  --megavote-gray-100: #f3f4f6;
+  --megavote-gray-50: #f9fafb;
+  
+  /* Cores de estado */
+  --megavote-success: var(--megavote-primary);
+  --megavote-warning: #f59e0b;
+  --megavote-danger: #ef4444;
+  --megavote-info: #3b82f6;
+  
+  /* Sombras */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  
+  /* Bordas */
+  --border-radius: 0.5rem;
+  --border-radius-lg: 0.75rem;
+  --border-radius-xl: 1rem;
+  
+  /* Transições */
+  --transition: all 0.2s ease-in-out;
+  --transition-slow: all 0.3s ease-in-out;
+}
+
+/* ===========================
+   RESET E BASE
+   =========================== */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.6;
+  color: var(--megavote-gray-700);
+  background-color: var(--megavote-gray-50);
+  margin: 0;
+  padding: 0;
+}
+
+/* ===========================
+   TIPOGRAFIA
+   =========================== */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.2;
+  margin-bottom: 1rem;
+  color: var(--megavote-gray-900);
+}
+
+h1 { font-size: 2.5rem; }
+h2 { font-size: 2rem; }
+h3 { font-size: 1.5rem; }
+h4 { font-size: 1.25rem; }
+h5 { font-size: 1.125rem; }
+h6 { font-size: 1rem; }
+
+p {
+  margin-bottom: 1rem;
+  color: var(--megavote-gray-600);
+}
+
+/* ===========================
+   LAYOUT PRINCIPAL
+   =========================== */
+.megavote-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.megavote-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===========================
+   HEADER/NAVBAR MEGAVOTE
+   =========================== */
+.megavote-navbar {
+  background: linear-gradient(135deg, var(--megavote-primary) 0%, var(--megavote-primary-dark) 100%);
+  box-shadow: var(--shadow-md);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.megavote-navbar .navbar-brand {
+  font-weight: 700;
+  font-size: 1.5rem;
+  color: white !important;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.megavote-navbar .navbar-brand:hover {
+  color: var(--megavote-primary-light) !important;
+}
+
+.megavote-logo {
+  width: 40px;
+  height: 40px;
+  background: white;
+  border-radius: var(--border-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: var(--megavote-primary);
+  font-size: 1.2rem;
+}
+
+/* ===========================
+   CARDS MODERNOS
+   =========================== */
+.megavote-card {
+  background: white;
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--megavote-gray-200);
+  transition: var(--transition);
+  overflow: hidden;
+}
+
+.megavote-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.megavote-card-header {
+  background: linear-gradient(135deg, var(--megavote-gray-50) 0%, white 100%);
+  border-bottom: 1px solid var(--megavote-gray-200);
+  padding: 1.5rem;
+  font-weight: 600;
+  color: var(--megavote-gray-900);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.megavote-card-body {
+  padding: 1.5rem;
+}
+
+.megavote-card-footer {
+  background: var(--megavote-gray-50);
+  border-top: 1px solid var(--megavote-gray-200);
+  padding: 1rem 1.5rem;
+}
+
+/* ===========================
+   BOTÕES MEGAVOTE
+   =========================== */
+.btn-megavote {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--border-radius);
+  font-weight: 500;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition);
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.btn-megavote-primary {
+  background: linear-gradient(135deg, var(--megavote-primary) 0%, var(--megavote-primary-dark) 100%);
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-megavote-primary:hover {
+  background: linear-gradient(135deg, var(--megavote-primary-dark) 0%, #0f3d26 100%);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+  color: white;
+}
+
+.btn-megavote-secondary {
+  background: white;
+  color: var(--megavote-primary);
+  border: 2px solid var(--megavote-primary);
+}
+
+.btn-megavote-secondary:hover {
+  background: var(--megavote-primary);
+  color: white;
+}
+
+.btn-megavote-danger {
+  background: linear-gradient(135deg, var(--megavote-danger) 0%, #dc2626 100%);
+  color: white;
+}
+
+.btn-megavote-danger:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: white;
+}
+
+.btn-megavote-warning {
+  background: linear-gradient(135deg, var(--megavote-warning) 0%, #d97706 100%);
+  color: white;
+}
+
+.btn-megavote-info {
+  background: linear-gradient(135deg, var(--megavote-info) 0%, #2563eb 100%);
+  color: white;
+}
+
+.btn-megavote-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+}
+
+.btn-megavote-lg {
+  padding: 1rem 2rem;
+  font-size: 1rem;
+}
+
+/* ===========================
+   FORMULÁRIOS
+   =========================== */
+.megavote-form-group {
+  margin-bottom: 1.5rem;
+}
+
+.megavote-label {
+  display: block;
+  font-weight: 500;
+  color: var(--megavote-gray-700);
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.megavote-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--megavote-gray-300);
+  border-radius: var(--border-radius);
+  font-size: 0.875rem;
+  transition: var(--transition);
+  background: white;
+}
+
+.megavote-input:focus {
+  outline: none;
+  border-color: var(--megavote-primary);
+  box-shadow: 0 0 0 3px rgb(96 163 61 / 0.1);
+}
+
+.megavote-input:invalid {
+  border-color: var(--megavote-danger);
+}
+
+.megavote-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.megavote-checkbox input[type="checkbox"] {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: var(--megavote-primary);
+}
+
+/* ===========================
+   TABELAS
+   =========================== */
+.megavote-table-container {
+  background: white;
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--megavote-gray-200);
+}
+
+.megavote-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.megavote-table th {
+  background: linear-gradient(135deg, var(--megavote-primary) 0%, var(--megavote-primary-dark) 100%);
+  color: white;
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.megavote-table td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--megavote-gray-200);
+  font-size: 0.875rem;
+}
+
+.megavote-table tbody tr:hover {
+  background: var(--megavote-gray-50);
+}
+
+.megavote-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.megavote-table-scroll {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* ===========================
+   ALERTAS
+   =========================== */
+.megavote-alert {
+  padding: 1rem 1.5rem;
+  border-radius: var(--border-radius);
+  margin-bottom: 1.5rem;
+  border-left: 4px solid;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.megavote-alert-success {
+  background: var(--megavote-primary-lighter);
+  border-color: var(--megavote-primary);
+  color: var(--megavote-primary-dark);
+}
+
+.megavote-alert-warning {
+  background: #fef3c7;
+  border-color: var(--megavote-warning);
+  color: #92400e;
+}
+
+.megavote-alert-danger {
+  background: #fee2e2;
+  border-color: var(--megavote-danger);
+  color: #991b1b;
+}
+
+.megavote-alert-info {
+  background: #dbeafe;
+  border-color: var(--megavote-info);
+  color: #1e40af;
+}
+
+/* ===========================
+   ÍCONES E BADGES
+   =========================== */
+.megavote-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: inline-block;
+}
+
+.megavote-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.megavote-badge-success {
+  background: var(--megavote-primary-lighter);
+  color: var(--megavote-primary-dark);
+}
+
+.megavote-badge-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* ===========================
+   GRID E LAYOUT
+   =========================== */
+.megavote-grid {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.megavote-grid-2 {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.megavote-grid-3 {
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.megavote-flex {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.megavote-flex-wrap {
+  flex-wrap: wrap;
+}
+
+.megavote-flex-between {
+  justify-content: space-between;
+}
+
+.megavote-flex-center {
+  justify-content: center;
+}
+
+/* ===========================
+   UTILITÁRIOS
+   =========================== */
+.megavote-text-center { text-align: center; }
+.megavote-text-right { text-align: right; }
+.megavote-text-muted { color: var(--megavote-gray-500); }
+.megavote-text-small { font-size: 0.875rem; }
+.megavote-text-xs { font-size: 0.75rem; }
+
+.megavote-mb-0 { margin-bottom: 0; }
+.megavote-mb-1 { margin-bottom: 0.5rem; }
+.megavote-mb-2 { margin-bottom: 1rem; }
+.megavote-mb-3 { margin-bottom: 1.5rem; }
+.megavote-mb-4 { margin-bottom: 2rem; }
+
+.megavote-mt-0 { margin-top: 0; }
+.megavote-mt-1 { margin-top: 0.5rem; }
+.megavote-mt-2 { margin-top: 1rem; }
+.megavote-mt-3 { margin-top: 1.5rem; }
+.megavote-mt-4 { margin-top: 2rem; }
+
+.megavote-p-0 { padding: 0; }
+.megavote-p-1 { padding: 0.5rem; }
+.megavote-p-2 { padding: 1rem; }
+.megavote-p-3 { padding: 1.5rem; }
+.megavote-p-4 { padding: 2rem; }
+
+/* ===========================
+   RESPONSIVIDADE
+   =========================== */
+@media (max-width: 768px) {
+  .megavote-container {
+    padding: 0 0.75rem;
+  }
+  
+  .megavote-card-body {
+    padding: 1rem;
+  }
+  
+  .megavote-card-header {
+    padding: 1rem;
+  }
+  
+  h1 { font-size: 2rem; }
+  h2 { font-size: 1.75rem; }
+  h3 { font-size: 1.25rem; }
+  
+  .btn-megavote {
+    padding: 0.625rem 1.25rem;
+    font-size: 0.8rem;
+  }
+  
+  .megavote-table th,
+  .megavote-table td {
+    padding: 0.75rem 0.5rem;
+    font-size: 0.8rem;
+  }
+}
+
+/* ===========================
+   ANIMAÇÕES
+   =========================== */
+@keyframes megavote-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.megavote-fade-in {
+  animation: megavote-fade-in 0.3s ease-out;
+}
+
+@keyframes megavote-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.megavote-pulse {
+  animation: megavote-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ===========================
+   LOADING E ESTADOS
+   =========================== */
+.megavote-loading {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--megavote-gray-300);
+  border-radius: 50%;
+  border-top-color: var(--megavote-primary);
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+

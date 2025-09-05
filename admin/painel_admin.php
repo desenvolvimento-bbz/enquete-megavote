@@ -38,7 +38,13 @@ include __DIR__ . '/../layout/header.php';
     <a href="create_assembleia.php" class="btn btn-primary">
       <i class="bi bi-plus-circle me-1"></i> Nova sala
     </a>
-    <a href="<?= $prefix ?>auth/logout.php" class="btn btn-outline-secondary">Sair</a>
+        <a href="../hub/index.php" class="btn btn-outline-secondary">
+      <i class="bi bi-grid-3x3-gap me-1"></i> Hub
+    </a>
+    <a href="../auth/logout.php" class="btn btn-outline-secondary"
+       onclick="return confirm('Sair do sistema?')">
+      Sair
+    </a>
   </div>
 </div>
 
