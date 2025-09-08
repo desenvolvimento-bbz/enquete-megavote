@@ -3,7 +3,6 @@
  * MEGAVOTE - SISTEMA DE SORTEIO DE VAGAS
  * Exportação de relatório em PDF (padronizado com guard de sessão + logs)
  */
-
 require_once __DIR__ . '/config.php';
 
 // Guarda de sessão (apenas ADMIN)
@@ -32,14 +31,14 @@ use Dompdf\Dompdf;
 use Dompdf\Options;
 
 try {
-  $resultado         = $_SESSION['resultado_sorteio'];
-  $remanescentes     = $_SESSION['remanescentes']     ?? [];
-  $sorteioTimestamp  = $_SESSION['sorteio_timestamp'] ?? time();
-  $sorteioConfig     = $_SESSION['sorteio_config']    ?? [];
-  $sorteioSeed       = $_SESSION['sorteio_seed']      ?? 'N/A';
+  $resultado        = $_SESSION['resultado_sorteio'];
+  $remanescentes    = $_SESSION['remanescentes']     ?? [];
+  $sorteioTimestamp = $_SESSION['sorteio_timestamp'] ?? time();
+  $sorteioConfig    = $_SESSION['sorteio_config']    ?? [];
+  $sorteioSeed      = $_SESSION['sorteio_seed']      ?? 'N/A';
 
-  $dataHora   = date('d/m/Y H:i:s', $sorteioTimestamp);
-  $usuario    = $_SESSION['username'] ?? 'Admin';
+  $dataHora = date('d/m/Y H:i:s', $sorteioTimestamp);
+  $usuario  = $_SESSION['username'] ?? 'Admin';
 
   // Estatísticas
   $totalVagas         = count($resultado);
@@ -54,16 +53,22 @@ try {
   if (!empty($sorteioConfig['usar_casadas']))   $configTexto[] = 'Vagas Casadas consideradas';
   $configStr = $configTexto ? implode(', ', $configTexto) : 'Configuração padrão';
 
-  // HTML do relatório
-  $html = '<!DOCTYPE html>
-<html lang="pt-br">
-<head>
+  // HTML do relatório (sem gradiente em <th>, com thead repetível)
+  $html = '<!DOCTYPE html><html lang="pt-br"><head>
   <meta charset="UTF-8">
   <style>
     @page { margin: 2cm; }
-    body{ font-family:"DejaVu Sans", Arial, sans-serif; font-size:11px; line-height:1.4; color:#374151; margin:0; padding:0; }
-    .header{ text-align:center; margin-bottom:30px; padding-bottom:20px; border-bottom:3px solid #60a33d; }
-    .logo{ background:#60a33d; color:#fff; width:60px; height:60px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:24px; font-weight:bold; margin-bottom:10px; }
+    body{
+      font-family:"DejaVu Sans", Arial, sans-serif;
+      font-size:11px; line-height:1.4; color:#374151; margin:0; padding:0;
+    }
+    .header{
+      text-align:center; margin-bottom:30px; padding-bottom:20px; border-bottom:3px solid #60a33d;
+    }
+    .logo{
+      background:#60a33d; color:#fff; width:60px; height:60px; border-radius:50%;
+      display:inline-flex; align-items:center; justify-content:center; font-size:24px; font-weight:bold; margin-bottom:10px;
+    }
     h1{ color:#60a33d; font-size:24px; margin:10px 0 5px; font-weight:bold; }
     h2{ color:#166434; font-size:16px; margin:20px 0 10px; font-weight:bold; border-bottom:1px solid #e5e7eb; padding-bottom:5px; }
     .subtitle{ color:#6b7280; font-size:12px; margin:0; }
@@ -79,8 +84,12 @@ try {
     .stats-label{ font-size:10px; color:#6b7280; text-transform:uppercase; letter-spacing:.5px; }
 
     table{ width:100%; border-collapse:collapse; margin-bottom:20px; font-size:10px; }
-    th{ background:linear-gradient(135deg, #60a33d 0%, #166434 100%); color:#fff; padding:10px 8px; text-align:left; font-weight:bold; font-size:9px; text-transform:uppercase; letter-spacing:.5px; }
-    td{ border:1px solid #e5e7eb; padding:8px; }
+    thead { display: table-header-group; } /* garante cabeçalho em todas as páginas */
+    th, td { border:1px solid #e5e7eb; padding:8px; text-align:left; }
+    th{
+      background:#166434; /* sólido, evita problema do gradiente no Dompdf */
+      color:#ffffff; font-weight:bold; font-size:9px; text-transform:uppercase; letter-spacing:.5px;
+    }
     tbody tr:nth-child(even){ background:#f9fafb; }
     tbody tr:hover{ background:#f3f4f6; }
 
@@ -93,9 +102,7 @@ try {
     .footer{ margin-top:30px; padding-top:20px; border-top:1px solid #e5e7eb; font-size:9px; color:#6b7280; text-align:center; }
     .audit{ background:#f0f9ff; border:1px solid #bae6fd; padding:10px; border-radius:5px; margin-bottom:20px; font-size:9px; }
   </style>
-</head>
-<body>
-
+</head><body>
   <div class="header">
     <div class="logo">MV</div>
     <h1>Relatório de Sorteio de Vagas</h1>
@@ -103,43 +110,21 @@ try {
   </div>
 
   <div class="grid">
-    <div class="row">
-      <div class="cell label">Data/Hora do Sorteio:</div>
-      <div class="cell value">'.htmlspecialchars($dataHora).'</div>
-    </div>
-    <div class="row">
-      <div class="cell label">Operador:</div>
-      <div class="cell value">'.htmlspecialchars($usuario).'</div>
-    </div>
-    <div class="row">
-      <div class="cell label">Configurações:</div>
-      <div class="cell value">'.htmlspecialchars($configStr).'</div>
-    </div>
+    <div class="row"><div class="cell label">Data/Hora do Sorteio:</div><div class="cell value">'.htmlspecialchars($dataHora).'</div></div>
+    <div class="row"><div class="cell label">Operador:</div><div class="cell value">'.htmlspecialchars($usuario).'</div></div>
+    <div class="row"><div class="cell label">Configurações:</div><div class="cell value">'.htmlspecialchars($configStr).'</div></div>
   </div>
 
   <div class="grid stats">
     <div class="row">
-      <div class="cell">
-        <span class="stats-number">'.$totalVagas.'</span>
-        <span class="stats-label">Total de Vagas</span>
-      </div>
-      <div class="cell">
-        <span class="stats-number">'.$totalSorteados.'</span>
-        <span class="stats-label">Vagas Sorteadas</span>
-      </div>
-      <div class="cell">
-        <span class="stats-number">'.$totalFixos.'</span>
-        <span class="stats-label">Vagas Fixas</span>
-      </div>
-      <div class="cell">
-        <span class="stats-number">'.$totalRemanescentes.'</span>
-        <span class="stats-label">Sem Vaga</span>
-      </div>
+      <div class="cell"><span class="stats-number">'.$totalVagas.'</span><span class="stats-label">Total de Vagas</span></div>
+      <div class="cell"><span class="stats-number">'.$totalSorteados.'</span><span class="stats-label">Vagas Sorteadas</span></div>
+      <div class="cell"><span class="stats-number">'.$totalFixos.'</span><span class="stats-label">Vagas Fixas</span></div>
+      <div class="cell"><span class="stats-number">'.$totalRemanescentes.'</span><span class="stats-label">Sem Vaga</span></div>
     </div>
   </div>
 
-  <div class="audit">
-    <strong>Informações de Auditoria:</strong>
+  <div class="audit"><strong>Informações de Auditoria:</strong>
     Seed do sorteio: '.htmlspecialchars((string)$sorteioSeed).' |
     Algoritmo: Mersenne Twister |
     Timestamp: '.$sorteioTimestamp.'
@@ -161,12 +146,11 @@ try {
   foreach ($resultado as $item) {
     $origem = $item['Origem'] ?? 'Sorteado';
     $classe = in_array($origem, ['Fixo JSON','Fixo Planilha'], true) ? 'origem-fixo' : 'origem-sorteado';
-
     $html .= '<tr class="'.$classe.'">
       <td>'.htmlspecialchars((string)$item['Apartamento']).'</td>
       <td>'.htmlspecialchars((string)$item['Bloco']).'</td>
       <td>'.htmlspecialchars((string)$item['Vaga']).'</td>
-      <td>'.htmlspecialchars((string)$item['Tipo Vaga']).'</td>
+      <td>'.htmlspecialchars((string)($item['Tipo Vaga'] ?? $item['Tipo de Vaga'] ?? '')).'</td>
       <td>'.htmlspecialchars((string)$origem).'</td>
     </tr>';
   }
@@ -185,8 +169,7 @@ try {
     <p>Relatório gerado automaticamente pelo Sistema MegaVote em '.date('d/m/Y H:i:s').'</p>
     <p>Para auditoria, consulte os logs do sistema pelo seed: '.htmlspecialchars((string)$sorteioSeed).'</p>
   </div>
-</body>
-</html>';
+</body></html>';
 
   // Dompdf
   $options = new Options();

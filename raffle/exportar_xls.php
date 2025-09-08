@@ -202,7 +202,6 @@ try {
     $linha += 3;
     $sheet->setCellValue("A{$linha}", 'Relatório gerado automaticamente pelo Sistema MegaVote');
     $sheet->setCellValue("A" . ($linha + 1), 'Data de geração: ' . date('d/m/Y H:i:s'));
-    $sheet->setCellValue("A" . ($linha + 2), 'Este documento possui validade legal como comprovante oficial do sorteio');
     
     $sheet->getStyle("A{$linha}:A" . ($linha + 2))->applyFromArray([
         'font' => ['italic' => true, 'size' => 9],

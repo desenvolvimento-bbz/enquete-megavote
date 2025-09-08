@@ -1,198 +1,97 @@
 <?php
 /**
  * MEGAVOTE - SISTEMA DE SORTEIO DE VAGAS
- * Lógica de sorteio (padronizada com guard de sessão + CSRF)
+ * Sorteio por BLOCO (padrão: Apartamento / Bloco / Vaga / Tipo de Vaga)
  */
-
 require_once __DIR__ . '/config.php';
 $loginPath = '../auth/login.php';
 require_once __DIR__ . '/../auth/session_timeout.php';
 enforceSessionGuard('admin', $loginPath);
 
-// Permite apenas POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-  header('Location: painel.php');
-  exit;
-}
-
-// CSRF
+// Apenas POST + CSRF
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') { header('Location: painel.php'); exit; }
 if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
   $_SESSION['error'] = 'Token de segurança inválido. Tente novamente.';
-  header('Location: painel.php');
-  exit;
+  header('Location: painel.php'); exit;
 }
-
-// Planilha importada?
 if (empty($_SESSION['dados_planilha']) || !is_array($_SESSION['dados_planilha'])) {
   $_SESSION['error'] = 'Nenhum dado de planilha encontrado. Importe a planilha primeiro.';
-  header('Location: painel.php');
-  exit;
+  header('Location: painel.php'); exit;
 }
 
 try {
-  $dadosPlanilha = $_SESSION['dados_planilha'];
+  $dados = $_SESSION['dados_planilha'];
 
-  // Configurações do formulário
-  $ignorarPNE    = isset($_POST['ignorar_pne']);
-  $ignorarIdosos = isset($_POST['ignorar_idosos']);
-  $usarCasadas   = isset($_POST['usar_casadas']); // reservado p/ evolução
+  // Estruturas por bloco
+  $aptosPorBloco = []; // 'A' => ['101', '102', ...]
+  $vagasPorBloco = []; // 'A' => [ ['Vaga'=>'S1','Tipo de Vaga'=>'Livre'], ... ]
+  foreach ($dados as $row) {
+    $bl   = trim((string)($row['Bloco'] ?? ''));
+    $apt  = trim((string)($row['Apartamento'] ?? ''));
+    $vaga = trim((string)($row['Vaga'] ?? ''));
+    $tipo = trim((string)($row['Tipo de Vaga'] ?? ''));
 
-  // Log das configs
-  $configs = [];
-  if ($ignorarPNE)    $configs[] = 'Ignorar PNE';
-  if ($ignorarIdosos) $configs[] = 'Ignorar Idosos';
-  if ($usarCasadas)   $configs[] = 'Usar Casadas';
-  $configsStr = $configs ? implode(', ', $configs) : 'Padrão';
-  logAction('Sorteio iniciado', "Configurações: {$configsStr}");
+    if ($bl === '') continue;
 
-  // Carrega fixos persistidos
-  $fixosPath        = DATA_PATH . '/fixos.json';
-  $fixosPersistidos = file_exists($fixosPath) ? json_decode(file_get_contents($fixosPath), true) : [];
-  if (!is_array($fixosPersistidos)) $fixosPersistidos = [];
-
-  // Estruturas de trabalho
-  $apartamentos     = [];
-  $vagasDisponiveis = [];
-  $resultado        = [];
-  $remanescentes    = [];
-  $paresFixados     = []; // ["Bloco|Subsolo" => true]
-
-  // ETAPA 1: aplica fixos do JSON
-  foreach ($fixosPersistidos as $fx) {
-    $bl = trim($fx['Bloco'] ?? '');
-    $ss = trim($fx['Subsolo'] ?? '');
-    $ap = trim($fx['Apartamento'] ?? '');
-    $tp = trim($fx['Tipo Vaga'] ?? '');
-
-    if ($bl !== '' && $ss !== '' && $ap !== '') {
-      $resultado[] = [
-        'Apartamento' => $ap,
-        'Bloco'       => $bl,
-        'Vaga'        => $ss,
-        'Tipo Vaga'   => $tp,
-        'Origem'      => 'Fixo JSON',
-      ];
-      $paresFixados["{$bl}|{$ss}"] = true;
-    }
+    if ($apt !== '')  { $aptosPorBloco[$bl][] = $apt; }
+    if ($vaga !== '') { $vagasPorBloco[$bl][] = ['Vaga'=>$vaga, 'Tipo de Vaga'=>$tipo]; }
   }
+  foreach ($aptosPorBloco as $bl=>$L)   $aptosPorBloco[$bl] = array_values(array_unique($L));
+  // não precisa únicos de vaga; pode repetir se existirem linhas duplicadas (mas aceitamos únicos também)
+  foreach ($vagasPorBloco as $bl=>$L)   $vagasPorBloco[$bl] = array_values($L);
 
-  // ETAPA 2: varre planilha – coleta aptos e separa vagas
-  foreach ($dadosPlanilha as $linha) {
-    $aptoPlan = trim($linha['Apartamento'] ?? '');
-    if ($aptoPlan !== '') {
-      $apartamentos[] = $aptoPlan;
-    }
+  $resultado     = [];
+  $remanescentes = [];
 
-    $bloco         = trim($linha['Bloco'] ?? '');
-    $subsolo       = trim($linha['Subsolo'] ?? '');
-    $tipo          = trim($linha['Tipo Vaga'] ?? '');
-    $fixoPlanilha  = trim($linha['Apartamento Fixado'] ?? '');
-
-    // Se vaga já fixada (JSON), pula
-    if ($bloco !== '' && $subsolo !== '' && isset($paresFixados["{$bloco}|{$subsolo}"])) {
-      continue;
-    }
-
-    // Fixos da própria planilha
-    if ($fixoPlanilha !== '') {
-      $resultado[] = [
-        'Apartamento' => $fixoPlanilha,
-        'Bloco'       => $bloco,
-        'Vaga'        => $subsolo,
-        'Tipo Vaga'   => $tipo,
-        'Origem'      => 'Fixo Planilha',
-      ];
-      $paresFixados["{$bloco}|{$subsolo}"] = true;
-      continue;
-    }
-
-    // Filtros (apenas para vagas não fixas)
-    $tipoLower = mb_strtolower($tipo, 'UTF-8');
-    if ($ignorarPNE && strpos($tipoLower, 'pne') !== false)    continue;
-    if ($ignorarIdosos && strpos($tipoLower, 'idoso') !== false) continue;
-
-    // Adiciona ao pool
-    if ($bloco !== '' && $subsolo !== '') {
-      $vagasDisponiveis[] = [
-        'Bloco'     => $bloco,
-        'Subsolo'   => $subsolo,
-        'Tipo Vaga' => $tipo,
-      ];
-    }
-  }
-
-  // ETAPA 3: aptos únicos e remove os já atendidos por fixos
-  $apartamentos      = array_values(array_unique($apartamentos));
-  $aptosJaAtendidos  = array_map(fn($r) => $r['Apartamento'], $resultado);
-  $aptosParaSortear  = array_values(array_diff($apartamentos, $aptosJaAtendidos));
-
-  // ETAPA 4: sorteio
+  // Sorteia bloco a bloco
   $seed = time();
   mt_srand($seed);
-  shuffle($vagasDisponiveis);
-  shuffle($aptosParaSortear);
   logAction('Seed do sorteio', "Seed: {$seed}");
 
-  $countAptos = count($aptosParaSortear);
-  for ($i = 0; $i < $countAptos; $i++) {
-    if (isset($vagasDisponiveis[$i])) {
+  foreach ($aptosPorBloco as $bl => $aptos) {
+    $vagas = $vagasPorBloco[$bl] ?? [];
+
+    shuffle($aptos);
+    shuffle($vagas);
+
+    $n = min(count($aptos), count($vagas));
+    for ($i=0; $i<$n; $i++) {
       $resultado[] = [
-        'Apartamento' => $aptosParaSortear[$i],
-        'Bloco'       => $vagasDisponiveis[$i]['Bloco'],
-        'Vaga'        => $vagasDisponiveis[$i]['Subsolo'],
-        'Tipo Vaga'   => $vagasDisponiveis[$i]['Tipo Vaga'],
+        'Apartamento' => $aptos[$i],
+        'Bloco'       => $bl,
+        'Vaga'        => $vagas[$i]['Vaga'],
+        'Tipo Vaga'   => $vagas[$i]['Tipo de Vaga'] ?? '',
         'Origem'      => 'Sorteado',
       ];
-    } else {
-      $remanescentes[] = $aptosParaSortear[$i];
+    }
+    if (count($aptos) > $n) {
+      $sobras = array_slice($aptos, $n);
+      foreach ($sobras as $ap) $remanescentes[] = "{$bl}-{$ap}";
     }
   }
 
-  // ETAPA 5: ordena por Bloco e Apartamento
-  usort($resultado, function ($a, $b) {
-    $cmp = strcmp((string)$a['Bloco'], (string)$b['Bloco']);
-    if ($cmp !== 0) return $cmp;
-
-    // tenta ordenar aptos numericamente quando possível
-    $aptoA = (int)$a['Apartamento'];
-    $aptoB = (int)$b['Apartamento'];
-    if ($aptoA > 0 && $aptoB > 0) {
-      return $aptoA <=> $aptoB;
-    }
+  // Ordena por Bloco + Apartamento (numérico quando possível)
+  usort($resultado, function($a,$b){
+    $c = strcmp((string)$a['Bloco'], (string)$b['Bloco']);
+    if ($c !== 0) return $c;
+    $na = (int)$a['Apartamento']; $nb = (int)$b['Apartamento'];
+    if ($na>0 && $nb>0) return $na <=> $nb;
     return strcmp((string)$a['Apartamento'], (string)$b['Apartamento']);
   });
 
-  // ETAPA 6: persiste em sessão
   $_SESSION['resultado_sorteio'] = $resultado;
   $_SESSION['remanescentes']     = $remanescentes;
   $_SESSION['sorteio_realizado'] = true;
   $_SESSION['sorteio_timestamp'] = time();
   $_SESSION['sorteio_seed']      = $seed;
-  $_SESSION['sorteio_config']    = [
-    'ignorar_pne'    => $ignorarPNE,
-    'ignorar_idosos' => $ignorarIdosos,
-    'usar_casadas'   => $usarCasadas,
-  ];
+  $_SESSION['sorteio_config']    = []; // sem flags agora
 
-  // Estatísticas + log
-  $totalVagas         = count($resultado);
-  $totalRemanescentes = count($remanescentes);
-  $totalFixos         = count(array_filter($resultado, fn($r) => in_array(($r['Origem'] ?? ''), ['Fixo JSON','Fixo Planilha'], true)));
-  $totalSorteados     = $totalVagas - $totalFixos;
+  $total = count($resultado);
+  $_SESSION['success'] = "Sorteio realizado com sucesso! {$total} vaga(s) atribuída(s), ".count($remanescentes)." apartamento(s) sem vaga no bloco.";
 
-  logAction(
-    'Sorteio concluído',
-    "Total: {$totalVagas}, Sorteadas: {$totalSorteados}, Fixas: {$totalFixos}, Remanescentes: {$totalRemanescentes}"
-  );
-
-  $_SESSION['success'] =
-    "Sorteio realizado com sucesso! {$totalVagas} vagas distribuídas, ".
-    "{$totalRemanescentes} apartamentos sem vaga.";
 } catch (Throwable $e) {
   logAction('Erro no sorteio', $e->getMessage());
-  $_SESSION['error'] = 'Erro ao realizar sorteio: ' . $e->getMessage();
+  $_SESSION['error'] = 'Erro ao realizar sorteio: '.$e->getMessage();
 }
 
-// Volta pro painel
-header('Location: painel.php');
-exit;
+header('Location: painel.php'); exit;

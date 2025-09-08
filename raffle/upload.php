@@ -1,197 +1,126 @@
 <?php
 /**
  * MEGAVOTE - SISTEMA DE SORTEIO DE VAGAS
- * Upload de planilhas padronizado/com guarda (compatível PHP 8.1+: null-safe)
+ * Upload de planilhas (padrão: Apartamento / Bloco / Vaga / Tipo de Vaga)
  */
-
-require_once __DIR__ . '/config.php';                 // ini_set/cookies ANTES da sessão
+require_once __DIR__ . '/config.php';
 $loginPath = '../auth/login.php';
-require_once __DIR__ . '/../auth/session_timeout.php';// abre sessão
+require_once __DIR__ . '/../auth/session_timeout.php';
 enforceSessionGuard('admin', $loginPath);
 
-// Só aceita POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: painel.php');
-    exit;
-}
+// Apenas POST
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') { header('Location: painel.php'); exit; }
 
-// Verifica token CSRF
+// CSRF
 if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
-    $_SESSION['error'] = 'Token de segurança inválido. Tente novamente.';
-    header('Location: painel.php');
-    exit;
+  $_SESSION['error'] = 'Token de segurança inválido. Tente novamente.';
+  header('Location: painel.php'); exit;
 }
 
-// Verifica se um arquivo foi enviado
+// Upload ok?
 if (!isset($_FILES['planilha']) || $_FILES['planilha']['error'] !== UPLOAD_ERR_OK) {
-    $errorMessages = [
-        UPLOAD_ERR_INI_SIZE   => 'Arquivo muito grande (limite do servidor)',
-        UPLOAD_ERR_FORM_SIZE  => 'Arquivo muito grande (limite do formulário)',
-        UPLOAD_ERR_PARTIAL    => 'Upload incompleto',
-        UPLOAD_ERR_NO_FILE    => 'Nenhum arquivo selecionado',
-        UPLOAD_ERR_NO_TMP_DIR => 'Diretório temporário não encontrado',
-        UPLOAD_ERR_CANT_WRITE => 'Erro ao escrever arquivo',
-        UPLOAD_ERR_EXTENSION  => 'Upload bloqueado por extensão'
-    ];
-    $error   = $_FILES['planilha']['error'] ?? UPLOAD_ERR_NO_FILE;
-    $message = $errorMessages[$error] ?? 'Erro desconhecido no upload';
-
-    logAction('Erro no upload', $message);
-    $_SESSION['error'] = "Erro no upload: {$message}";
-    header('Location: painel.php');
-    exit;
+  $map = [
+    UPLOAD_ERR_INI_SIZE=>'Arquivo muito grande (servidor)',UPLOAD_ERR_FORM_SIZE=>'Arquivo muito grande (formulário)',
+    UPLOAD_ERR_PARTIAL=>'Upload incompleto',UPLOAD_ERR_NO_FILE=>'Nenhum arquivo',UPLOAD_ERR_NO_TMP_DIR=>'Sem /tmp',
+    UPLOAD_ERR_CANT_WRITE=>'Falha ao escrever',UPLOAD_ERR_EXTENSION=>'Bloqueado por extensão'
+  ];
+  $err = $_FILES['planilha']['error'] ?? UPLOAD_ERR_NO_FILE;
+  $_SESSION['error'] = 'Erro no upload: '.($map[$err] ?? 'desconhecido');
+  header('Location: painel.php'); exit;
 }
 
-// Validações de segurança
-$arquivo           = $_FILES['planilha'];
-$nomeOriginal      = $arquivo['name'] ?? '';
-$tamanho           = (int)($arquivo['size'] ?? 0);
-$tipoMime          = $arquivo['type'] ?? '';
-$arquivoTemporario = $arquivo['tmp_name'] ?? '';
-
-// Extensão
-$extensao = strtolower(pathinfo($nomeOriginal, PATHINFO_EXTENSION));
-if (!in_array($extensao, ALLOWED_EXTENSIONS, true)) {
-    logAction('Upload rejeitado', "Extensão inválida: {$extensao}");
-    $_SESSION['error'] = 'Apenas arquivos .xlsx são permitidos.';
-    header('Location: painel.php');
-    exit;
+// Validação básica
+$nomeOriginal = (string)($_FILES['planilha']['name'] ?? '');
+$ext = strtolower(pathinfo($nomeOriginal, PATHINFO_EXTENSION));
+if (!in_array($ext, ALLOWED_EXTENSIONS, true)) {
+  $_SESSION['error'] = 'Apenas arquivos .xlsx são permitidos.';
+  header('Location: painel.php'); exit;
+}
+if (($_FILES['planilha']['size'] ?? 0) > MAX_FILE_SIZE) {
+  $_SESSION['error'] = 'Arquivo muito grande.';
+  header('Location: painel.php'); exit;
 }
 
-// Tamanho
-if ($tamanho > MAX_FILE_SIZE) {
-    $maxSizeMB = (int)(MAX_FILE_SIZE / (1024 * 1024));
-    logAction('Upload rejeitado', "Arquivo muito grande: {$tamanho} bytes");
-    $_SESSION['error'] = "Arquivo muito grande. Máximo permitido: {$maxSizeMB}MB";
-    header('Location: painel.php');
-    exit;
+// Move para uploads/
+$dest = UPLOADS_PATH.'/planilha_'.date('Ymd_His').'_'.bin2hex(random_bytes(4)).'.xlsx';
+if (!move_uploaded_file($_FILES['planilha']['tmp_name'], $dest)) {
+  $_SESSION['error'] = 'Erro ao salvar arquivo no servidor.';
+  header('Location: painel.php'); exit;
 }
 
-// MIME permitido (alguns navegadores usam application/octet-stream para .xlsx – se precisar, acrescente)
-$tiposPermitidos = [
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-excel',
-];
-if (!in_array($tipoMime, $tiposPermitidos, true)) {
-    // allowlist “quente”: se quiser aceitar octet-stream, descomente a linha abaixo
-    // if ($tipoMime !== 'application/octet-stream') { ... }
-    logAction('Upload rejeitado', "Tipo MIME inválido: {$tipoMime}");
-    $_SESSION['error'] = 'Tipo de arquivo não permitido.';
-    header('Location: painel.php');
-    exit;
-}
-
-// Gera nome único
-$nomeArquivo = 'planilha_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.xlsx';
-$caminhoFinal = UPLOADS_PATH . '/' . $nomeArquivo;
-
-// Move o arquivo
-if (!move_uploaded_file($arquivoTemporario, $caminhoFinal)) {
-    logAction('Erro no upload', 'Falha ao mover arquivo');
-    $_SESSION['error'] = 'Erro ao salvar arquivo no servidor.';
-    header('Location: painel.php');
-    exit;
-}
-
-// Carrega PhpSpreadsheet
-if (!file_exists(__DIR__ . '/vendor/autoload.php')) {
-    logAction('Erro no sistema', 'PhpSpreadsheet não encontrado');
-    $_SESSION['error'] = 'Biblioteca PhpSpreadsheet não encontrada. Contate o administrador.';
-    @unlink($caminhoFinal);
-    header('Location: painel.php');
-    exit;
-}
-
-require __DIR__ . '/vendor/autoload.php';
+// PhpSpreadsheet
+$autoload = __DIR__.'/vendor/autoload.php';
+if (!file_exists($autoload)) { @unlink($dest); $_SESSION['error']='Biblioteca PhpSpreadsheet não encontrada.'; header('Location: painel.php'); exit; }
+require $autoload;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 try {
-    $spreadsheet = IOFactory::load($caminhoFinal);
-    $dados = $spreadsheet->getActiveSheet()->toArray(null, true, true, true);
+  $ss = IOFactory::load($dest);
+  $rows = $ss->getActiveSheet()->toArray(null, true, true, true);
+  if (empty($rows) || count($rows) < 2) throw new Exception('Planilha vazia ou sem dados válidos');
 
-    if (empty($dados) || count($dados) < 2) {
-        throw new Exception('Planilha vazia ou sem dados válidos');
+  // Header (linha 1) por letra + aliases
+  $h1 = $rows[1] ?? [];
+  $norm = function($s){ $s=(string)$s; $s=trim(mb_strtolower($s,'UTF-8')); $s=preg_replace('/\s+/', ' ', $s); return $s; };
+  $aliases = [
+    'apartamento'   => 'Apartamento',
+    'bloco'         => 'Bloco',
+    'vaga'          => 'Vaga',       // canônico
+    'subsolo'       => 'Vaga',       // alias aceito
+    'tipo vaga'     => 'Tipo de Vaga',
+    'tipo de vaga'  => 'Tipo de Vaga',
+  ];
+  $headerByLetter = [];
+  foreach ($h1 as $letter => $val) {
+    $canon = $aliases[$norm($val)] ?? null;
+    if ($canon) $headerByLetter[$letter] = $canon;
+  }
+  unset($rows[1]);
+
+  // Obrigações: exatamente essas 4
+  $required = ['Apartamento','Bloco','Vaga','Tipo de Vaga'];
+  $present  = array_values(array_unique(array_values($headerByLetter)));
+  $missing  = array_values(array_diff($required, $present));
+  if (!empty($missing)) throw new Exception('Colunas obrigatórias não encontradas: '.implode(', ', $missing));
+
+  // Remove linhas totalmente vazias
+  $rows = array_filter($rows, function($r){
+    foreach ($r as $v) if ($v !== null && trim((string)$v) !== '') return true;
+    return false;
+  });
+
+  // Converte linhas → chaves canônicas
+  $out = [];
+  foreach ($rows as $r) {
+    $rec = [];
+    foreach ($headerByLetter as $L => $canon) {
+      $val = $r[$L] ?? '';
+      $rec[$canon] = $val === null ? '' : (string)$val;
     }
+    // Sanitiza e filtra vazias de fato
+    $apto = trim((string)$rec['Apartamento']);
+    $bl   = trim((string)$rec['Bloco']);
+    $vg   = trim((string)$rec['Vaga']);
+    $tv   = trim((string)$rec['Tipo de Vaga']);
+    if ($apto==='' && $vg==='') continue; // sem apto e sem vaga = ignora
+    $rec['Apartamento'] = sanitizeInput($apto);
+    $rec['Bloco']       = sanitizeInput($bl);
+    $rec['Vaga']        = sanitizeInput($vg);
+    $rec['Tipo de Vaga']= sanitizeInput($tv);
+    $out[] = $rec;
+  }
+  if (empty($out)) throw new Exception('Nenhum dado válido encontrado na planilha');
 
-    // -------- Cabeçalho (linha 1) null-safe --------
-    $primeiraLinha = $dados[1] ?? [];
-    // Converte qualquer null para string vazia e aplica trim em string
-    $header = array_map(function($v){
-        if ($v === null) return '';
-        return trim((string)$v);
-    }, $primeiraLinha);
+  $_SESSION['dados_planilha'] = $out;
+  unset($_SESSION['resultado_sorteio'], $_SESSION['remanescentes'], $_SESSION['sorteio_realizado']);
 
-    unset($dados[1]); // remove linha do header
-
-    // Remove linhas totalmente vazias
-    $dados = array_filter($dados, function($linha){
-        // $linha é um array tipo ['A'=>..., 'B'=>..., ...]
-        foreach ($linha as $v) {
-            if ($v !== null && trim((string)$v) !== '') return true;
-        }
-        return false;
-    });
-
-    // Colunas obrigatórias (nomes exatos do modelo)
-    $colunasObrigatorias = ['Bloco', 'Apartamento', 'Subsolo', 'Tipo Vaga', 'Apartamento Fixado'];
-
-    // Verifica presença das colunas obrigatórias
-    $faltando = array_values(array_diff($colunasObrigatorias, $header));
-    if (!empty($faltando)) {
-        throw new Exception('Colunas obrigatórias não encontradas: ' . implode(', ', $faltando));
-    }
-
-    // Índices do cabeçalho para acelerar o combine (evita avisos se tamanhos divergirem)
-    // Mapeia: nomeColuna => posição (0..n)
-    $headerPos = [];
-    foreach ($header as $idx => $nomeCol) {
-        if ($nomeCol !== '') $headerPos[$nomeCol] = $idx;
-    }
-
-    // -------- Converte linhas A/B/C... para chaves nomeadas, null-safe --------
-    $dadosConvertidos = [];
-    foreach ($dados as $linha) {
-        // $linha vem indexado por A,B,C...; usamos os valores na ordem do header
-        $vals = array_values($linha);
-
-        // Constrói array nomeado com base nas posições do header
-        $vaga = [];
-        foreach ($headerPos as $nomeCol => $pos) {
-            $valor = $vals[$pos] ?? null;
-            $vaga[$nomeCol] = $valor === null ? '' : (string)$valor; // null-safe
-        }
-
-        // Campos essenciais
-        $apto   = trim($vaga['Apartamento'] ?? '');
-        $tipo   = trim($vaga['Tipo Vaga'] ?? '');
-        if ($apto === '' || $tipo === '') {
-            continue;
-        }
-
-        // Sanitiza tudo
-        foreach ($vaga as $k => $v) {
-            $vaga[$k] = sanitizeInput($v ?? '');
-        }
-
-        $dadosConvertidos[] = $vaga;
-    }
-
-    if (empty($dadosConvertidos)) {
-        throw new Exception('Nenhum dado válido encontrado na planilha');
-    }
-
-    // Salva na sessão e limpa estado anterior de sorteio
-    $_SESSION['dados_planilha']   = $dadosConvertidos;
-    unset($_SESSION['resultado_sorteio'], $_SESSION['remanescentes'], $_SESSION['sorteio_realizado']);
-
-    logAction('Planilha importada', "Arquivo: {$nomeOriginal}, registros: " . count($dadosConvertidos));
-    $_SESSION['success'] = "Planilha importada com sucesso! " . count($dadosConvertidos) . " registros carregados.";
+  logAction('Planilha importada', "Arquivo: {$nomeOriginal}, registros: ".count($out));
+  $_SESSION['success'] = 'Planilha importada com sucesso! '.count($out).' registro(s).';
 
 } catch (Throwable $e) {
-    logAction('Erro na importação', $e->getMessage());
-    if (file_exists($caminhoFinal)) { @unlink($caminhoFinal); }
-    $_SESSION['error'] = 'Erro ao processar planilha: ' . $e->getMessage();
+  @unlink($dest);
+  logAction('Erro na importação', $e->getMessage());
+  $_SESSION['error'] = 'Erro ao processar planilha: '.$e->getMessage();
 }
 
-header('Location: painel.php');
-exit;
+header('Location: painel.php'); exit;
