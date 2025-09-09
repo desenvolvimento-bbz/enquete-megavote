@@ -171,7 +171,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 <div class="brand-bar py-2">
   <div class="container d-flex align-items-center justify-content-between">
     <div class="brand">
-      <a href="../index.php">Megavote Enquetes</a>
+      <a href="../index.php">Serviços Megavote</a>
     </div>
   </div>
 </div>
