@@ -42,15 +42,18 @@ try {
 
   // Estatísticas
   $totalVagas         = count($resultado);
-  $totalRemanescentes = count($remanescentes);
-  $totalFixos         = count(array_filter($resultado, fn($r) => in_array($r['Origem'] ?? '', ['Fixo JSON','Fixo Planilha'], true)));
+  // PHP 7.2: substituir arrow function por função anônima compatível
+  $totalFixos         = count(array_filter($resultado, function ($r) {
+    $origem = isset($r['Origem']) ? $r['Origem'] : '';
+    return in_array($origem, ['Fixo JSON', 'Fixo Planilha'], true);
+  }));
   $totalSorteados     = $totalVagas - $totalFixos;
 
   // Configurações aplicadas
   $configTexto = [];
-  if (!empty($sorteioConfig['ignorar_pne']))    $configTexto[] = 'Vagas PNE ignoradas';
-  if (!empty($sorteioConfig['ignorar_idosos'])) $configTexto[] = 'Vagas Idosos ignoradas';
-  if (!empty($sorteioConfig['usar_casadas']))   $configTexto[] = 'Vagas Casadas consideradas';
+  if (!empty($sorteioConfig['ignorar_pne']))    { $configTexto[] = 'Vagas PNE ignoradas'; }
+  if (!empty($sorteioConfig['ignorar_idosos'])) { $configTexto[] = 'Vagas Idosos ignoradas'; }
+  if (!empty($sorteioConfig['usar_casadas']))   { $configTexto[] = 'Vagas Casadas consideradas'; }
   $configStr = $configTexto ? implode(', ', $configTexto) : 'Configuração padrão';
 
   // HTML do relatório (sem gradiente em <th>, com thead repetível)
@@ -144,13 +147,13 @@ try {
     <tbody>';
 
   foreach ($resultado as $item) {
-    $origem = $item['Origem'] ?? 'Sorteado';
+    $origem = isset($item['Origem']) ? $item['Origem'] : 'Sorteado';
     $classe = in_array($origem, ['Fixo JSON','Fixo Planilha'], true) ? 'origem-fixo' : 'origem-sorteado';
     $html .= '<tr class="'.$classe.'">
       <td>'.htmlspecialchars((string)$item['Apartamento']).'</td>
       <td>'.htmlspecialchars((string)$item['Bloco']).'</td>
       <td>'.htmlspecialchars((string)$item['Vaga']).'</td>
-      <td>'.htmlspecialchars((string)($item['Tipo Vaga'] ?? $item['Tipo de Vaga'] ?? '')).'</td>
+      <td>'.htmlspecialchars((string)(isset($item['Tipo Vaga']) ? $item['Tipo Vaga'] : (isset($item['Tipo de Vaga']) ? $item['Tipo de Vaga'] : ''))).'</td>
       <td>'.htmlspecialchars((string)$origem).'</td>
     </tr>';
   }

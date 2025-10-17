@@ -2,11 +2,22 @@
 // auth/logout.php
 // Destroi a sessão e registra log de saída (inclusive quedas por inatividade)
 
+// -------- Cookies de sessão com flags seguras --------
 $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-session_set_cookie_params([
-  'lifetime' => 0, 'path' => '/', 'domain' => '',
-  'secure' => $secure, 'httponly' => true, 'samesite' => 'Lax',
-]);
+
+if (PHP_VERSION_ID >= 70300) {
+  session_set_cookie_params([
+    'lifetime' => 0,
+    'path'     => '/',
+    'domain'   => '',
+    'secure'   => $secure,
+    'httponly' => true,
+    'samesite' => 'Lax',
+  ]);
+} else {
+  // Fallback compatível com PHP 7.2 (sem SameSite)
+  session_set_cookie_params(0, '/', '', $secure, true);
+}
 
 session_start();
 require_once(__DIR__ . '/../config/db.php');
@@ -38,7 +49,9 @@ function log_access(PDO $pdo, string $action, array $meta = []): void {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     ");
     $stmt->execute([$userId, $role, $action, $ip, $ua, $page, $metaJson]);
-  } catch (Throwable $e) { /* noop */ }
+  } catch (Throwable $e) {
+    // Silencioso
+  }
 }
 
 // motivo opcional (?reason=idle|ttl|fingerprint|manual)

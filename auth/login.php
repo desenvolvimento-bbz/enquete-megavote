@@ -1,14 +1,24 @@
 <?php
-// -------- Cookies de sessão com flags seguras (defina ANTES de session_start) --------
+// -------- Cookies de sessão com flags seguras --------
+// Em PHP 7.3+ dá para usar o array com SameSite.
+// Em PHP 7.2 usamos a assinatura antiga (sem SameSite).
 $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-session_set_cookie_params([
-    'lifetime' => 0,
-    'path'     => '/',
-    'domain'   => '',
-    'secure'   => $secure,
-    'httponly' => true,
-    'samesite' => 'Lax',
-]);
+
+if (PHP_VERSION_ID >= 70300) {
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'domain'   => '',
+        'secure'   => $secure,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+} else {
+    // PHP 7.2: sem suporte nativo a SameSite nesta função
+    session_set_cookie_params(0, '/', '', $secure, true);
+    // Se quiser muito o SameSite em 7.2, dá para setar via ini_set em alguns ambientes:
+    // @ini_set('session.cookie_samesite', 'Lax'); // só funciona em builds/patches específicos
+}
 
 session_start();
 
@@ -88,14 +98,20 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         if ($user && $okRole && password_verify($password, $user['password'])) {
             // Reforça cookie atual e evita fixation
-            setcookie(session_name(), session_id(), [
-                'expires'  => 0,
-                'path'     => '/',
-                'domain'   => '',
-                'secure'   => $secure,
-                'httponly' => true,
-                'samesite' => 'Lax',
-            ]);
+            if (PHP_VERSION_ID >= 70300) {
+                setcookie(session_name(), session_id(), [
+                    'expires'  => 0,
+                    'path'     => '/',
+                    'domain'   => '',
+                    'secure'   => $secure,
+                    'httponly' => true,
+                    'samesite' => 'Lax',
+                ]);
+            } else {
+                // PHP 7.2: assinatura antiga, sem SameSite
+                setcookie(session_name(), session_id(), 0, '/', '', $secure, true);
+            }
+
             session_regenerate_id(true);
 
             // Metadados de sessão (timeout/fingerprint)

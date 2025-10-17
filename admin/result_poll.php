@@ -1,13 +1,15 @@
 <?php
-session_start();
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../auth/login.php");
-    exit;
-}
+// Guarda de sessão padronizada (timeout + fingerprint)
+$loginPath = '../auth/login.php';
+require_once __DIR__ . '/../auth/session_timeout.php';
+enforceSessionGuard('admin', $loginPath);
+
 require_once('../config/db.php');
 
-$poll_id = $_GET['poll_id'] ?? null;
-if (!$poll_id) { die("Enquete não informada."); }
+$poll_id = isset($_GET['poll_id']) ? (int)$_GET['poll_id'] : 0;
+if ($poll_id <= 0) {
+    die('Enquete não informada.');
+}
 
 // Verifica propriedade
 $stmt = $pdo->prepare("
@@ -17,9 +19,11 @@ $stmt = $pdo->prepare("
     JOIN assembleias a ON i.assembleia_id = a.id
     WHERE p.id = ? AND a.criada_por = ?
 ");
-$stmt->execute([(int)$poll_id, $_SESSION['user_id']]);
+$stmt->execute([$poll_id, $_SESSION['user_id']]);
 $poll = $stmt->fetch();
-if (!$poll) { die("Permissão negada ou enquete inexistente."); }
+if (!$poll) {
+    die('Permissão negada ou enquete inexistente.');
+}
 
 // Carrega opções com contagem (apenas votos não anulados)
 $opt = $pdo->prepare("
@@ -33,6 +37,7 @@ $opt = $pdo->prepare("
 $opt->execute([$poll_id]);
 $options = $opt->fetchAll();
 
+// Monta dados para o gráfico
 $labels = array_column($options, 'option_text');
 $data   = array_map('intval', array_column($options, 'votos'));
 $total  = array_sum($data);
@@ -58,7 +63,7 @@ $total  = array_sum($data);
      <strong>Item:</strong> <?= htmlspecialchars($poll['item_descricao']) ?></p>
 
   <p><em>Visibilidade pública:</em> <?= $poll['show_results'] ? 'Liberado' : 'Oculto' ?></p>
-  <a href="manage_poll.php?item_id=<?= $poll['item_id'] ?>">← Voltar</a>
+  <a href="manage_poll.php?item_id=<?= (int)$poll['item_id'] ?>">← Voltar</a>
   &nbsp;|&nbsp;
   <button onclick="exportPDF()">📄 Exportar PDF</button>
   <br><br>
@@ -68,8 +73,8 @@ $total  = array_sum($data);
       <p>Ainda não há votos válidos.</p>
     <?php else: ?>
       <div class="poll-card">
-        <strong>Total de votos válidos: <?= $total ?></strong>
-        <div class="chart-wrap" style="height: <?= max(140, count($labels)*28) ?>px;">
+        <strong>Total de votos válidos: <?= (int)$total ?></strong>
+        <div class="chart-wrap" style="height: <?= (int)max(140, count($labels)*28) ?>px;">
           <canvas id="pollChart"></canvas>
         </div>
         <br>
@@ -77,13 +82,13 @@ $total  = array_sum($data);
     <?php endif; ?>
   </div>
 
-  <!-- Libs -->
+  <!-- Libs (CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
   <script>
-    // Paleta (Primary, Secondary, Gray)
+    // Paleta (Primary, Secondary)
     const PALETTE = ['#60A33D', '#53554A'];
     function palette(n){
       const out = [];
@@ -114,7 +119,7 @@ $total  = array_sum($data);
       }
     };
 
-    // Dados do PHP
+    // Dados vindos do PHP
     const labels = <?= json_encode($labels, JSON_UNESCAPED_UNICODE) ?>;
     const data   = <?= json_encode($data) ?>;
 
@@ -181,20 +186,21 @@ $total  = array_sum($data);
 
       pdf.save('resultado-enquete-<?= (int)$poll_id ?>.pdf');
     }
-
   </script>
 
-  <table border="1" cellpadding="6"
+  <!-- CORREÇÃO: faltava o ">" no <table ...> -->
+  <table border="1" cellpadding="6">
     <tr>
       <th>Opção</th>
       <th>Votos</th>
       <th>%</th>
     </tr>
     <?php foreach ($options as $o):
-          $pct = $total > 0 ? round(($o['votos'] * 100) / $total, 2) : 0; ?>
+          $v = (int)$o['votos'];
+          $pct = $total > 0 ? round(($v * 100) / $total, 2) : 0; ?>
       <tr>
         <td><?= htmlspecialchars($o['option_text']) ?></td>
-        <td><?= (int)$o['votos'] ?></td>
+        <td><?= $v ?></td>
         <td><?= $pct ?>%</td>
       </tr>
     <?php endforeach; ?>

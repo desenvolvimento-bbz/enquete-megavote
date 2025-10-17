@@ -1,274 +1,259 @@
 <?php
-// -------- Cookies de sessão com flags seguras (defina ANTES de session_start) --------
-$secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-session_set_cookie_params([
-  'lifetime' => 0,
-  'path'     => '/',
-  'domain'   => '',
-  'secure'   => $secure,
-  'httponly' => true,
-  'samesite' => 'Lax',
-]);
+// auth/register.php
+// Registro de usuário com seleção de papel ('admin' | 'basic') validada por whitelist.
+// Compatível com PHP 7.2. Mantém CSRF dedicado (csrf_register) e checagens de duplicidade.
 
-session_start();
-require_once('../config/db.php');
-
-// Se já estiver logado, manda para o painel correspondente
-if (isset($_SESSION['user_id'], $_SESSION['role'])) {
-  if ($_SESSION['role'] === 'master') { header('Location: ../master/painel_master.php'); exit; }
-  if ($_SESSION['role'] === 'admin')  { header('Location: ../admin/painel_admin.php'); exit; }
-  if ($_SESSION['role'] === 'basic')  { header('Location: ../vote/painel_basic.php'); exit; }
+// === Bootstrap mínimo de sessão segura (7.2-friendly) ===
+if (PHP_SAPI !== 'cli') {
+    ini_set('session.cookie_secure', '1');     // requer HTTPS para efetivo
+    ini_set('session.cookie_httponly', '1');
+    // Em PHP 7.2 não há suporte nativo a SameSite via session_set_cookie_params; configurar no servidor/reverse-proxy.
+}
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
 }
 
-// CSRF para o formulário de cadastro
-if (empty($_SESSION['csrf_register'])) {
-  $_SESSION['csrf_register'] = bin2hex(random_bytes(32));
+// === Dependências de DB (ajuste o caminho conforme seu projeto) ===
+// Espera um $pdo (PDO) conectado, com ERRMODE_EXCEPTION e emulacao desativada.
+require_once __DIR__ . '/../config/db.php';
+
+// === Funções utilitárias ===
+function generate_csrf_token($key) {
+    if (empty($_SESSION[$key])) {
+        $_SESSION[$key] = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
+    }
+    return $_SESSION[$key];
+}
+function verify_csrf_token($key, $token) {
+    return isset($_SESSION[$key], $token) && hash_equals($_SESSION[$key], $token);
+}
+function redirect($path) {
+    header('Location: ' . $path);
+    exit;
+}
+function sanitize($v) {
+    return trim((string)$v);
 }
 
-$errors   = [];
-$username = trim($_POST['username'] ?? '');
-$email    = trim($_POST['email'] ?? '');
-$password = $_POST['password'] ?? '';
-$confirm  = $_POST['confirm']  ?? '';
+// === Estado da página ===
+$errors = [];
+$success = false;
 
+// Pré-gerar token CSRF da tela
+$csrf_key = 'csrf_register';
+$csrf_token = generate_csrf_token($csrf_key);
+
+// POST handler
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  // Checagem CSRF
-  if (!isset($_POST['csrf']) || !hash_equals($_SESSION['csrf_register'], $_POST['csrf'])) {
-    $errors[] = 'Falha de validação. Atualize a página e tente novamente.';
-  } else {
-    // --- Validações ---
-    if ($username === '' || !preg_match('/^[A-Za-z0-9._-]{3,30}$/', $username)) {
-      $errors[] = 'Usuário inválido. Use 3–30 caracteres (letras, números, ponto, hífen ou sublinhado).';
+    // 1) CSRF
+    $posted_token = isset($_POST['csrf_token']) ? $_POST['csrf_token'] : '';
+    if (!verify_csrf_token($csrf_key, $posted_token)) {
+        $errors[] = 'Falha de verificação CSRF. Recarregue a página e tente novamente.';
     }
 
+    // 2) Inputs
+    $username = sanitize(isset($_POST['username']) ? $_POST['username'] : '');
+    $email    = sanitize(isset($_POST['email']) ? $_POST['email'] : '');
+    $password = isset($_POST['password']) ? (string)$_POST['password'] : '';
+    $role_in  = strtolower(sanitize(isset($_POST['role']) ? $_POST['role'] : 'basic'));
+
+    // 3) Whitelist e normalização do papel
+    $allowed_roles = ['admin', 'basic'];
+    $role = in_array($role_in, $allowed_roles, true) ? $role_in : 'basic';
+
+    // 3.1) Mitigação de criação arbitrária de admin:
+    // Use um feature flag/variável de ambiente para bloquear auto-registro de admins em produção.
+    // Se ALLOW_ADMIN_SELF_SIGNUP != 'true', força 'basic' independentemente do select.
+    $allowAdminSignup = getenv('ALLOW_ADMIN_SELF_SIGNUP') === 'true';
+    if (!$allowAdminSignup && $role === 'admin') {
+        // Comentário: em produção, considere exigir aprovação manual ou fluxo separado para promover admin.
+        $role = 'basic';
+    }
+
+    // 4) Validações
+    if ($username === '' || !preg_match('/^[a-zA-Z0-9_.-]{3,32}$/', $username)) {
+        $errors[] = 'Informe um nome de usuário válido (3-32 chars; letras, números, ".", "_", "-").';
+    }
     if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-      $errors[] = 'E-mail inválido.';
+        $errors[] = 'Informe um e-mail válido.';
+    }
+    if ($password === '' || strlen($password) < 8) {
+        $errors[] = 'A senha deve ter pelo menos 8 caracteres.';
     }
 
-    if (strlen($password) < 8) {
-      $errors[] = 'A senha deve ter ao menos 8 caracteres.';
-    }
-
-    if ($password !== $confirm) {
-      $errors[] = 'A confirmação de senha não confere.';
-    }
-
-    // Duplicidade
+    // 5) Duplicidade (username/email)
     if (!$errors) {
-      try {
-        $stmt = $pdo->prepare('SELECT username, email FROM users WHERE username = ? OR email = ? LIMIT 1');
-        $stmt->execute([$username, $email]);
-        if ($row = $stmt->fetch()) {
-          if (strcasecmp($row['username'], $username) === 0) { $errors[] = 'Este usuário já está em uso.'; }
-          if (strcasecmp($row['email'], $email) === 0)       { $errors[] = 'Este e-mail já está em uso.'; }
+        try {
+            $stmt = $pdo->prepare('SELECT id, username, email FROM users WHERE username = ? OR email = ? LIMIT 1');
+            $stmt->execute([$username, $email]);
+            $exists = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($exists) {
+                if (strcasecmp($exists['username'], $username) === 0) {
+                    $errors[] = 'Nome de usuário já está em uso.';
+                }
+                if (strcasecmp($exists['email'], $email) === 0) {
+                    $errors[] = 'E-mail já está cadastrado.';
+                }
+            }
+        } catch (Exception $e) {
+            $errors[] = 'Erro ao verificar duplicidade. Tente novamente.';
         }
-      } catch (PDOException $e) {
-        $errors[] = 'Erro ao validar usuário. Tente novamente.';
-      }
     }
 
-    // Criação
+    // 6) Inserção
     if (!$errors) {
-      try {
-        $hash = password_hash($password, PASSWORD_DEFAULT);
-        $ins  = $pdo->prepare('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)');
-        $ins->execute([$username, $email, $hash, 'basic']);
+        try {
+            // Segurança extra: transação (não é estritamente necessário para uma única inserção,
+            // mas padroniza o fluxo com demais operações).
+            $pdo->beginTransaction();
 
-        // Redireciona para o login (se quiser exibir mensagem, pode usar login.php?reg=1)
-        header('Location: login.php?reg=1');
-        exit;
-      } catch (PDOException $e) {
-        $errors[] = 'Erro ao criar sua conta. Tente novamente.';
-      }
+            $password_hash = password_hash($password, PASSWORD_DEFAULT); // PHP 7.2 => bcrypt
+
+            $ins = $pdo->prepare('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)');
+            $ins->execute([$username, $email, $password_hash, $role]);
+
+            $pdo->commit();
+            $success = true;
+
+            // Limpa token para evitar re-post
+            unset($_SESSION[$csrf_key]);
+
+            // Opcional: registre em access_logs se houver tabela e política definida
+            // try {
+            //     $log = $pdo->prepare('INSERT INTO access_logs (user_id, action, ip_address, user_agent, created_at) VALUES (?, ?, ?, ?, NOW())');
+            //     $log->execute([$pdo->lastInsertId(), 'register', $_SERVER['REMOTE_ADDR'] ?? null, $_SERVER['HTTP_USER_AGENT'] ?? null]);
+            // } catch (Exception $e) { /* silencioso */ }
+
+            // Redireciona para login
+            redirect('../auth/login.php?registered=1');
+        } catch (Exception $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $errors[] = 'Erro ao criar a conta. Por favor, tente novamente.';
+        }
     }
-  }
 }
+
+// Regerar token caso tenha sido invalidado após tentativa
+$csrf_token = generate_csrf_token($csrf_key);
 ?>
-<!DOCTYPE html>
-<html lang="pt-BR" data-bs-theme="auto">
+<!doctype html>
+<html lang="pt-br">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Criar conta · MegaVote</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-  <style>
-    :root{
-      --mv-primary:#60a33d;   /* verde principal */
-      --mv-dark:#166434;      /* verde escuro */
-      --mv-gray:#53554A;      /* cinza */
-      --mv-soft:#f3f6f4;      /* fundo suave */
-    }
-    html,body{height:100%}
-    body{
-      background: linear-gradient(180deg, #e9f6e6 0%, #ffffff 40%);
-      min-height:100vh;
-      display:flex; flex-direction:column;
-    }
-    main{flex:1; display:flex; align-items:center}
-    .brand-bar{
-      background: var(--mv-primary);
-      color:#fff;
-    }
-    .brand-bar .brand a{
-      color:#fff; text-decoration:none; font-weight:700; letter-spacing:.2px;
-    }
-    .login-card{
-      max-width: 880px;
-      border:1px solid #e5e8eb;
-      box-shadow: 0 10px 20px rgba(0,0,0,.06);
-      border-radius: 16px;
-      overflow:hidden;
-      background:#fff;
-    }
-    .login-card .left{
-      background: #f7fbf6;
-      border-right: 1px solid #edf0ee;
-    }
-    .mv-btn{
-      background: var(--mv-primary);
-      border-color: var(--mv-primary);
-    }
-    .mv-btn:hover{ background: var(--mv-dark); border-color: var(--mv-dark); }
-    .form-control:focus{
-      border-color: var(--mv-primary);
-      box-shadow: 0 0 0 .25rem rgba(96,163,61,.15);
-    }
-    .muted{ color:#7b7f74; }
-    footer small{ color:#7a7d76; }
-  </style>
+    <meta charset="utf-8">
+    <title>Registrar — Poll-App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Bootstrap 5.3 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons (opcional) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background: #f5f7fb; }
+        .card { border-radius: 1rem; }
+        .brand { font-weight: 700; letter-spacing: .3px; }
+    </style>
 </head>
 <body>
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-5 col-md-7">
+            <div class="text-center mb-4">
+                <h1 class="brand">Poll-App</h1>
+                <p class="text-muted mb-0">Crie sua conta</p>
+            </div>
 
-<!-- Barra superior minimalista (igual login) -->
-<div class="brand-bar py-2">
-  <div class="container d-flex align-items-center justify-content-between">
-    <div class="brand">
-      <a href="../index.php">Megavote Enquetes</a>
+            <?php if (!empty($errors)): ?>
+                <div class="alert alert-danger" role="alert">
+                    <strong>Não foi possível concluir o cadastro:</strong>
+                    <ul class="mb-0">
+                        <?php foreach ($errors as $e): ?>
+                            <li><?= htmlspecialchars($e, ENT_QUOTES, 'UTF-8'); ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            <?php endif; ?>
+
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <form method="post" novalidate>
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf_token, ENT_QUOTES, 'UTF-8'); ?>">
+
+                        <div class="mb-3">
+                            <label class="form-label" for="username">Usuário</label>
+                            <input type="text" class="form-control" id="username" name="username"
+                                   value="<?= isset($username) ? htmlspecialchars($username, ENT_QUOTES, 'UTF-8') : '' ?>"
+                                   required minlength="3" maxlength="32" autocomplete="username">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="email">E-mail</label>
+                            <input type="email" class="form-control" id="email" name="email"
+                                   value="<?= isset($email) ? htmlspecialchars($email, ENT_QUOTES, 'UTF-8') : '' ?>"
+                                   required autocomplete="email">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="password">Senha</label>
+                            <input type="password" class="form-control" id="password" name="password"
+                                   required minlength="8" autocomplete="new-password">
+                            <div class="form-text">Mínimo de 8 caracteres.</div>
+                        </div>
+
+                        <!-- Mantém o select já existente no formulário -->
+                        <div class="mb-3">
+                            <label class="form-label" for="role">Papel</label>
+                            <select id="role" name="role" class="form-select">
+                                <?php
+                                $selectedRole = isset($role_in) ? $role_in : 'basic';
+                                ?>
+                                <option value="basic" <?= ($selectedRole === 'basic') ? 'selected' : '' ?>>Básico</option>
+                                <option value="admin" <?= ($selectedRole === 'admin') ? 'selected' : '' ?>>Admin</option>
+                            </select>
+                            <div class="form-text">
+                                <!-- Dica de segurança: em produção, a criação de Admin pode estar bloqueada por política interna. -->
+                                A criação de contas "Admin" pode exigir aprovação conforme configuração do ambiente.
+                            </div>
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-person-plus"></i> Criar conta
+                            </button>
+                        </div>
+                    </form>
+
+                    <hr class="my-4">
+                    <div class="text-center">
+                        <a href="../auth/login.php" class="link-secondary">Já possui conta? Entrar</a>
+                    </div>
+                </div>
+            </div>
+
+            <p class="text-center text-muted small mt-3">
+                Ao continuar, você concorda com nossos termos e políticas internas.
+            </p>
+        </div>
     </div>
-  </div>
 </div>
 
-<main>
-  <div class="container py-5">
-    <div class="mx-auto login-card row g-0">
-      <!-- Lado “branding” -->
-      <div class="col-md-5 left p-4 d-flex flex-column justify-content-between">
-        <div>
-          <div class="d-flex align-items-center gap-2 mb-2">
-            <i class="bi bi-person-plus-fill" style="font-size:1.4rem;color:var(--mv-primary)"></i>
-            <h5 class="mb-0" style="color:var(--mv-gray)">Crie sua conta</h5>
-          </div>
-          <p class="mb-4 muted">Cadastre-se para participar das enquetes e acompanhar as votações do seu condomínio.</p>
-          <ul class="list-unstyled small muted mb-0">
-            <li class="mb-2"><i class="bi bi-lock-fill me-2"></i>Segurança e privacidade</li>
-            <li class="mb-2"><i class="bi bi-people-fill me-2"></i>Fácil participação</li>
-            <li class="mb-2"><i class="bi bi-graph-up-arrow me-2"></i>Votação simples</li>
-          </ul>
-        </div>
-            <div class="small text-muted">Precisa de ajuda? <a href="#" class="text-decoration-none" style="color:var(--mv-dark)">Fale conosco</a></div>
-      </div>
-
-      <!-- Lado do formulário -->
-      <div class="col-md-7 p-4 p-md-5">
-        <h3 class="fw-bold mb-1" style="color:var(--mv-gray)">Cadastro*</h3>
-        <div class="mb-4 muted">Preencha os campos abaixo para criar sua conta no MegaVote</div>
-
-        <?php if (!empty($errors)): ?>
-          <div class="alert alert-danger py-2">
-            <ul class="mb-0">
-              <?php foreach ($errors as $e): ?>
-                <li><?= htmlspecialchars($e) ?></li>
-              <?php endforeach; ?>
-            </ul>
-          </div>
-        <?php endif; ?>
-
-        <form method="POST" novalidate>
-          <input type="hidden" name="csrf" value="<?= htmlspecialchars($_SESSION['csrf_register']) ?>">
-
-          <div class="mb-3">
-            <label for="username" class="form-label">Usuário</label>
-            <input type="text" class="form-control" id="username" name="username"
-                   value="<?= htmlspecialchars($username) ?>" required
-                   placeholder="ex.: joao.silva">
-          </div>
-
-          <div class="mb-3">
-            <label for="email" class="form-label">E-mail</label>
-            <input type="email" class="form-control" id="email" name="email"
-                   value="<?= htmlspecialchars($email) ?>" required
-                   placeholder="voce@exemplo.com">
-          </div>
-
-          <div class="row g-3">
-            <div class="col-sm-6">
-              <label for="password" class="form-label">Senha</label>
-              <div class="input-group">
-                <input type="password" class="form-control" id="password" name="password"
-                       minlength="8" required placeholder="Mín. 8 caracteres">
-                <button type="button" class="btn btn-outline-secondary" id="togglePwd" aria-label="Mostrar/ocultar senha">
-                  <i class="bi bi-eye"></i>
-                </button>
-              </div>
-            </div>
-            <div class="col-sm-6">
-              <label for="confirm" class="form-label">Confirmar senha</label>
-              <div class="input-group">
-                <input type="password" class="form-control" id="confirm" name="confirm"
-                       minlength="8" required placeholder="Repita a senha">
-                <button type="button" class="btn btn-outline-secondary" id="toggleConfirm" aria-label="Mostrar/ocultar confirmação">
-                  <i class="bi bi-eye"></i>
-                </button>
-              </div>
-            </div>
-                <div class="col-12">
-                <label for="role" class="form-label">Perfil</label>
-                <select class="form-select" id="role" name="role" required>
-                    <option value="admin" <?= (($_POST['role'] ?? '') === 'admin' ? 'selected' : '') ?>>Admin</option>
-                    <option value="basic" <?= (($_POST['role'] ?? '') === 'basic' ? 'selected' : '') ?>>Básico</option>
-                </select>
-                <div class="form-text">Opção temporária para fins de teste. *</div>
-                </div>
-          </div>
-          <div class="d-grid mt-3">
-            <button type="submit" class="btn mv-btn btn-lg" style="color:var(--mv-soft)">Criar conta</button>
-          </div>
-        </form>
-
-        <div class="mt-3">
-          <a href="login.php" class="text-decoration-none" style="color:var(--mv-dark)">Já tem conta? Entrar</a>
-        </div>
-      </div>
-    </div>
-    <a class="text-decoration-none" style="color:var(--mv-dark)">Página temporária para fins de teste.*</a><br>
-  </div>
-</main>
-
-<footer class="border-top bg-white">
-  <div class="container py-3 text-center">
-    <small>Powered by <strong>Megavote</strong></small>
-  </div>
-</footer>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Bootstrap JS (opcional, para UX melhor com validações visuais etc.) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-  // Mostrar/ocultar senha e confirmação
-  const togglePwd = document.getElementById('togglePwd');
-  const pwd       = document.getElementById('password');
-  togglePwd?.addEventListener('click', ()=>{
-    const isPwd = pwd.type === 'password';
-    pwd.type = isPwd ? 'text' : 'password';
-    togglePwd.innerHTML = isPwd ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
-  });
-
-  const toggleConfirm = document.getElementById('toggleConfirm');
-  const conf          = document.getElementById('confirm');
-  toggleConfirm?.addEventListener('click', ()=>{
-    const isPwd = conf.type === 'password';
-    conf.type = isPwd ? 'text' : 'password';
-    toggleConfirm.innerHTML = isPwd ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
-  });
+// Validação front-end opcional (não substitui validação server-side)
+(function () {
+    'use strict';
+    var forms = document.querySelectorAll('form');
+    Array.prototype.slice.call(forms).forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            form.classList.add('was-validated');
+        }, false);
+    });
+})();
 </script>
 </body>
 </html>

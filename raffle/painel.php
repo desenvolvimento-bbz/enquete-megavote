@@ -55,7 +55,7 @@ include __DIR__ . '/../layout/header.php';
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
     <h2 class="mb-0">🎲 Sorteio de Vagas</h2>
-    <div class="text-muted">Sorteie vagas por bloco sem misturar blocos entre si.</div>
+    <div class="text-muted">Sistema de sorteio automático de vagas.</div>
   </div>
   <div class="d-flex flex-wrap gap-2">
     <a href="../hub/index.php" class="btn btn-outline-secondary">

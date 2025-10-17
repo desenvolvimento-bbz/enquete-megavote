@@ -1,15 +1,19 @@
 <?php
 /**
  * MEGAVOTE - SISTEMA DE SORTEIO DE VAGAS
- * Sorteio por BLOCO (padrão: Apartamento / Bloco / Vaga / Tipo de Vaga)
+ * Sorteio GLOBAL (distribui vagas entre todos os apartamentos, independentemente do bloco)
+ * Padrão de planilha: Apartamento / Bloco / Vaga / Tipo de Vaga
  */
+
 require_once __DIR__ . '/config.php';
 $loginPath = '../auth/login.php';
 require_once __DIR__ . '/../auth/session_timeout.php';
 enforceSessionGuard('admin', $loginPath);
 
 // Apenas POST + CSRF
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') { header('Location: painel.php'); exit; }
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+  header('Location: painel.php'); exit;
+}
 if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
   $_SESSION['error'] = 'Token de segurança inválido. Tente novamente.';
   header('Location: painel.php'); exit;
@@ -19,66 +23,110 @@ if (empty($_SESSION['dados_planilha']) || !is_array($_SESSION['dados_planilha'])
   header('Location: painel.php'); exit;
 }
 
+/**
+ * Embaralhamento Fisher–Yates usando mt_rand (respeita mt_srand).
+ * (shuffle() não usa o gerador MT no PHP 7.x)
+ */
+function shuffle_mt(array &$arr): void {
+  $n = count($arr);
+  for ($i = $n - 1; $i > 0; $i--) {
+    $j = mt_rand(0, $i);
+    if ($j !== $i) {
+      $tmp     = $arr[$i];
+      $arr[$i] = $arr[$j];
+      $arr[$j] = $tmp;
+    }
+  }
+}
+
 try {
   $dados = $_SESSION['dados_planilha'];
 
-  // Estruturas por bloco
-  $aptosPorBloco = []; // 'A' => ['101', '102', ...]
-  $vagasPorBloco = []; // 'A' => [ ['Vaga'=>'S1','Tipo de Vaga'=>'Livre'], ... ]
+  // -----------------------------
+  // 1) Extrai pools GLOBAIS
+  //    - $aptos: lista de apartamentos com seu bloco (para exibição/auditoria)
+  //    - $vagas: lista de vagas disponíveis (sem amarrar a bloco)
+  // -----------------------------
+  $aptos = []; // [['Apartamento'=>'101','Bloco'=>'A'], ...] (únicos por Apto+Bloco)
+  $seenApto = []; // chave "Bloco|Apartamento" p/ evitar duplicatas
+
+  $vagas = []; // [['Vaga'=>'1','Tipo de Vaga'=>'Livre'], ...]
+
   foreach ($dados as $row) {
     $bl   = trim((string)($row['Bloco'] ?? ''));
     $apt  = trim((string)($row['Apartamento'] ?? ''));
     $vaga = trim((string)($row['Vaga'] ?? ''));
     $tipo = trim((string)($row['Tipo de Vaga'] ?? ''));
 
-    if ($bl === '') continue;
+    // Coleta apartamento (se informado)
+    if ($apt !== '') {
+      $key = $bl . '|' . $apt;
+      if (!isset($seenApto[$key])) {
+        $aptos[] = ['Apartamento' => $apt, 'Bloco' => $bl];
+        $seenApto[$key] = true;
+      }
+    }
 
-    if ($apt !== '')  { $aptosPorBloco[$bl][] = $apt; }
-    if ($vaga !== '') { $vagasPorBloco[$bl][] = ['Vaga'=>$vaga, 'Tipo de Vaga'=>$tipo]; }
+    // Coleta vaga (se informada) - GLOBAL, sem restrição por bloco
+    if ($vaga !== '') {
+      $vagas[] = ['Vaga' => $vaga, 'Tipo de Vaga' => $tipo];
+    }
   }
-  foreach ($aptosPorBloco as $bl=>$L)   $aptosPorBloco[$bl] = array_values(array_unique($L));
-  // não precisa únicos de vaga; pode repetir se existirem linhas duplicadas (mas aceitamos únicos também)
-  foreach ($vagasPorBloco as $bl=>$L)   $vagasPorBloco[$bl] = array_values($L);
 
-  $resultado     = [];
-  $remanescentes = [];
+  // Se não houver nada útil, aborta
+  if (empty($aptos) || empty($vagas)) {
+    $_SESSION['error'] = 'Não há apartamentos ou vagas suficientes para realizar o sorteio.';
+    header('Location: painel.php'); exit;
+  }
 
-  // Sorteia bloco a bloco
+  // -----------------------------
+  // 2) Semeia PRNG e embaralha GLOBALMENTE
+  // -----------------------------
   $seed = time();
   mt_srand($seed);
   logAction('Seed do sorteio', "Seed: {$seed}");
 
-  foreach ($aptosPorBloco as $bl => $aptos) {
-    $vagas = $vagasPorBloco[$bl] ?? [];
+  shuffle_mt($aptos);
+  shuffle_mt($vagas);
 
-    shuffle($aptos);
-    shuffle($vagas);
+  // -----------------------------
+  // 3) Pareamento simples na ordem embaralhada
+  // -----------------------------
+  $n = min(count($aptos), count($vagas));
+  $resultado     = [];
+  $remanescentes = [];
 
-    $n = min(count($aptos), count($vagas));
-    for ($i=0; $i<$n; $i++) {
-      $resultado[] = [
-        'Apartamento' => $aptos[$i],
-        'Bloco'       => $bl,
-        'Vaga'        => $vagas[$i]['Vaga'],
-        'Tipo Vaga'   => $vagas[$i]['Tipo de Vaga'] ?? '',
-        'Origem'      => 'Sorteado',
-      ];
-    }
-    if (count($aptos) > $n) {
-      $sobras = array_slice($aptos, $n);
-      foreach ($sobras as $ap) $remanescentes[] = "{$bl}-{$ap}";
+  for ($i = 0; $i < $n; $i++) {
+    $resultado[] = [
+      'Apartamento' => $aptos[$i]['Apartamento'],
+      'Bloco'       => $aptos[$i]['Bloco'],
+      'Vaga'        => $vagas[$i]['Vaga'],
+      'Tipo Vaga'   => isset($vagas[$i]['Tipo de Vaga']) ? $vagas[$i]['Tipo de Vaga'] : '',
+      'Origem'      => 'Sorteado',
+    ];
+  }
+
+  // Apartamentos que sobraram sem vaga
+  if (count($aptos) > $n) {
+    for ($i = $n; $i < count($aptos); $i++) {
+      $remanescentes[] = $aptos[$i]['Bloco'] . '-' . $aptos[$i]['Apartamento'];
     }
   }
 
-  // Ordena por Bloco + Apartamento (numérico quando possível)
-  usort($resultado, function($a,$b){
+  // -----------------------------
+  // 4) Ordenação apenas para EXIBIÇÃO (não altera o sorteio)
+  // -----------------------------
+  usort($resultado, function ($a, $b) {
     $c = strcmp((string)$a['Bloco'], (string)$b['Bloco']);
     if ($c !== 0) return $c;
     $na = (int)$a['Apartamento']; $nb = (int)$b['Apartamento'];
-    if ($na>0 && $nb>0) return $na <=> $nb;
+    if ($na > 0 && $nb > 0) return $na <=> $nb;
     return strcmp((string)$a['Apartamento'], (string)$b['Apartamento']);
   });
 
+  // -----------------------------
+  // 5) Persistência e mensagens
+  // -----------------------------
   $_SESSION['resultado_sorteio'] = $resultado;
   $_SESSION['remanescentes']     = $remanescentes;
   $_SESSION['sorteio_realizado'] = true;
@@ -87,11 +135,11 @@ try {
   $_SESSION['sorteio_config']    = []; // sem flags agora
 
   $total = count($resultado);
-  $_SESSION['success'] = "Sorteio realizado com sucesso! {$total} vaga(s) atribuída(s), ".count($remanescentes)." apartamento(s) sem vaga no bloco.";
+  $_SESSION['success'] = 'Sorteio realizado com sucesso! ' . $total . ' vaga(s) atribuída(s), ' . count($remanescentes) . ' apartamento(s) sem vaga.';
 
 } catch (Throwable $e) {
   logAction('Erro no sorteio', $e->getMessage());
-  $_SESSION['error'] = 'Erro ao realizar sorteio: '.$e->getMessage();
+  $_SESSION['error'] = 'Erro ao realizar sorteio: ' . $e->getMessage();
 }
 
 header('Location: painel.php'); exit;

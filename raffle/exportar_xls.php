@@ -44,7 +44,11 @@ try {
     // Estatísticas
     $totalVagas = count($resultado);
     $totalRemanescentes = count($remanescentes);
-    $totalFixos = count(array_filter($resultado, fn($r) => in_array($r['Origem'] ?? '', ['Fixo JSON', 'Fixo Planilha'])));
+    // Compatibilidade PHP 7.2: substituir arrow function por função anônima
+    $totalFixos = count(array_filter($resultado, function ($r) {
+        $origem = $r['Origem'] ?? '';
+        return in_array($origem, ['Fixo JSON', 'Fixo Planilha'], true);
+    }));
     $totalSorteados = $totalVagas - $totalFixos;
     
     // Configurações aplicadas
@@ -165,7 +169,7 @@ try {
         $sheet->setCellValue("E{$linha}", $origem);
         
         // Cor de fundo baseada na origem
-        $corFundo = in_array($origem, ['Fixo JSON', 'Fixo Planilha']) ? 'FEF3C7' : $corClara;
+        $corFundo = in_array($origem, ['Fixo JSON', 'Fixo Planilha'], true) ? 'FEF3C7' : $corClara;
         
         $sheet->getStyle("A{$linha}:E{$linha}")->applyFromArray([
             'fill' => [
@@ -254,4 +258,3 @@ try {
     exit;
 }
 ?>
-

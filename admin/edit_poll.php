@@ -51,7 +51,7 @@ $item_id     = (int)$poll['item_id'];
 $question    = $poll['question'];
 $max_choices = (int)($poll['max_choices'] ?? 1);
 
-// Verifica se há votos (não anulados ou mesmo anulados — a política aqui é travar edição se houve votação)
+// Verifica se há votos
 $v_stmt = $pdo->prepare("
     SELECT COUNT(*) FROM votes 
     WHERE option_id IN (SELECT id FROM options WHERE poll_id = ?)
@@ -68,9 +68,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$tem_voto) {
     $options_in   = $_POST['options'] ?? [];
     $max_choices  = max(1, (int)($_POST['max_choices'] ?? 1));
 
-    // Limpa opções vazias só para validação de quantidade,
-    // mas no loop de update/insert vamos pular as vazias individualmente.
-    $clean_options = array_values(array_filter(array_map('trim', $options_in), fn($t)=>$t !== ''));
+    // (PHP 7.2) substituir arrow function por closure
+    $clean_options = array_values(array_filter(array_map('trim', $options_in), function ($t) {
+        return $t !== '';
+    }));
 
     if (count($clean_options) < 2) {
         $erro = "Insira pelo menos duas opções.";
@@ -163,7 +164,6 @@ include __DIR__ . '/../layout/header.php';
 
       <div class="fw-semibold mb-2">Opções:</div>
       <?php
-        // carrega contagem de votos válidos por opção
         $c = $pdo->prepare("
           SELECT o.option_text, COUNT(v.id) AS votos
           FROM options o
@@ -206,19 +206,16 @@ include __DIR__ . '/../layout/header.php';
   <div class="card shadow-sm">
     <div class="card-body">
       <form method="post" id="pollForm" novalidate>
-        <!-- Pergunta -->
         <div class="mb-3">
           <label class="form-label fw-semibold">Pergunta da enquete</label>
           <textarea name="question" class="form-control" rows="3" required><?= htmlspecialchars($question) ?></textarea>
         </div>
 
-        <!-- Máximo de escolhas -->
         <div class="mb-3">
           <label class="form-label fw-semibold">Número máximo de escolhas permitidas</label>
           <input type="number" name="max_choices" class="form-control" min="1" max="99" value="<?= (int)$max_choices ?>" required>
         </div>
 
-        <!-- Opções -->
         <div class="mb-2">
           <label class="form-label fw-semibold">Opções</label>
           <div id="options" class="vstack gap-2">
@@ -258,7 +255,7 @@ include __DIR__ . '/../layout/header.php';
 <?php endif; ?>
 
 <script>
-// Adiciona nova opção (para edição)
+// (JS inalterado)
 function addOption() {
   const container = document.getElementById('options');
   const index = container.children.length + 1;
@@ -304,7 +301,6 @@ function updateRemoveButtons() {
   });
 }
 
-// Validação no submit (mínimo 2 opções e max_choices coerente)
 document.getElementById('pollForm')?.addEventListener('submit', function(e) {
   const texts = [...document.querySelectorAll('input[name="options[]"]')]
                   .map(i => i.value.trim())

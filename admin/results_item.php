@@ -67,9 +67,13 @@ foreach ($polls as $p) {
     $opt->execute([$p['id']]);
     $rows = $opt->fetchAll();
 
-    $labels = array_map(fn($r) => $r['option_text'], $rows);
-    $data   = array_map(fn($r) => (int)$r['votos'], $rows);
-    $total  = array_sum($data);
+    $labels = array();
+    $data   = array();
+    foreach ($rows as $r) {
+        $labels[] = $r['option_text'];
+        $data[]   = (int)$r['votos'];
+    }
+    $total = array_sum($data);
 
     $charts[] = [
         'poll_id'      => (int)$p['id'],
@@ -171,7 +175,7 @@ include __DIR__ . '/../layout/header.php';
 
   const charts = <?php echo json_encode($charts, JSON_UNESCAPED_UNICODE); ?>;
 
-  charts.forEach(cfg => {
+  charts.forEach(function(cfg){
     const el = document.getElementById('chart-'+cfg.poll_id);
     if (!el) return;
 
@@ -189,14 +193,14 @@ include __DIR__ . '/../layout/header.php';
         }]
       },
       options: {
-        indexAxis: 'y',          // barras na horizontal
+        indexAxis: 'y',          
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: (ctx) => `${ctx.parsed.x} voto(s)`
+              label: function(ctx) { return ctx.parsed.x + " voto(s)"; }
             }
           }
         },

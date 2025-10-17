@@ -16,29 +16,42 @@ $loginPath     = $loginPath     ?? 'auth/login.php';
 // =========================
 // Sessão + flags do cookie
 // =========================
-$secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+$secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+
+// Detecta suporte nativo a SameSite (PHP >= 7.3)
+$SUPPORTS_SAMESITE = (PHP_VERSION_ID >= 70300);
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
   // Define flags do cookie ANTES de abrir a sessão
-  session_set_cookie_params([
-    'lifetime' => 0,
-    'path'     => '/',
-    'domain'   => '',
-    'secure'   => $secure,
-    'httponly' => true,
-    'samesite' => 'Lax',
-  ]);
+  if ($SUPPORTS_SAMESITE) {
+    // PHP >= 7.3: pode usar array com 'samesite'
+    session_set_cookie_params([
+      'lifetime' => 0,
+      'path'     => '/',
+      'domain'   => '',
+      'secure'   => $secure,
+      'httponly' => true,
+      'samesite' => 'Lax',
+    ]);
+  } else {
+    // PHP 7.2: não há suporte nativo a SameSite
+    session_set_cookie_params(0, '/', '', $secure, true);
+  }
   session_start();
 } else {
-  // Refereza as flags do cookie da sessão já aberta
-  setcookie(session_name(), session_id(), [
-    'expires'  => 0,
-    'path'     => '/',
-    'domain'   => '',
-    'secure'   => $secure,
-    'httponly' => true,
-    'samesite' => 'Lax',
-  ]);
+  // Reaplica as flags do cookie da sessão já aberta
+  if ($SUPPORTS_SAMESITE) {
+    setcookie(session_name(), session_id(), [
+      'expires'  => 0,
+      'path'     => '/',
+      'domain'   => '',
+      'secure'   => $secure,
+      'httponly' => true,
+      'samesite' => 'Lax',
+    ]);
+  } else {
+    setcookie(session_name(), session_id(), 0, '/', '', $secure, true);
+  }
 }
 
 // =========================
@@ -49,6 +62,7 @@ function _endSessionAndRedirect($loginPath, $reason) {
     $_SESSION = [];
     if (ini_get('session.use_cookies')) {
       $p = session_get_cookie_params();
+      // Nota: em PHP 7.2 não há samesite no retorno; usamos os campos padrão
       setcookie(session_name(), '', time() - 42000, $p['path'], $p['domain'], $p['secure'], $p['httponly']);
     }
     session_destroy();
@@ -64,9 +78,9 @@ $now = time();
 
 if (!isset($_SESSION['created_at'])) {
   // Inicialização na 1ª passagem
-  $_SESSION['created_at']      = $now;
-  $_SESSION['last_activity']   = $now;
-  $_SESSION['sid_last_rotated']= $now;
+  $_SESSION['created_at']       = $now;
+  $_SESSION['last_activity']    = $now;
+  $_SESSION['sid_last_rotated'] = $now;
 
   // Define fingerprint inicial
   $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
@@ -100,6 +114,20 @@ if (!isset($_SESSION['created_at'])) {
   if ($ROTATE_EVERY > 0 && ($now - $lastRot) >= $ROTATE_EVERY) {
     session_regenerate_id(true);
     $_SESSION['sid_last_rotated'] = $now;
+
+    // Reenvia o cookie com as flags após a rotação
+    if ($SUPPORTS_SAMESITE) {
+      setcookie(session_name(), session_id(), [
+        'expires'  => 0,
+        'path'     => '/',
+        'domain'   => '',
+        'secure'   => $secure,
+        'httponly' => true,
+        'samesite' => 'Lax',
+      ]);
+    } else {
+      setcookie(session_name(), session_id(), 0, '/', '', $secure, true);
+    }
   }
 }
 

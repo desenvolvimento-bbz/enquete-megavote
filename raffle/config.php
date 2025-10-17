@@ -24,16 +24,16 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
   // em produção com HTTPS, troque para 1
   @ini_set('session.cookie_secure',    '0');
 
-  // Se quiser padronizar os cookies aqui:
-  $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-  session_set_cookie_params([
-    'lifetime' => 0,
-    'path'     => '/',
-    'domain'   => '',
-    'secure'   => $secure,
-    'httponly' => true,
-    'samesite' => 'Lax',
-  ]);
+  // PHP 7.2: sem array de opções e sem suporte nativo a SameSite.
+  // Hack: adiciona "; samesite=Lax" no path.
+  $secure       = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+  $cookiePath   = '/; samesite=Lax';
+  $cookieDomain = '';
+  $cookieLife   = 0;
+  $cookieHttp   = true;
+
+  // Define flags do cookie ANTES da sessão (o guard abrirá a sessão depois)
+  session_set_cookie_params($cookieLife, $cookiePath, $cookieDomain, $secure, $cookieHttp);
 }
 
 /* -----------------------

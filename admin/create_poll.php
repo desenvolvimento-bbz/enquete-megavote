@@ -49,7 +49,8 @@ if ($max_choices < 1) $max_choices = 1;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $question = trim($_POST['question'] ?? '');
     $options  = array_map('trim', $_POST['options'] ?? []);
-    $options  = array_values(array_filter($options, fn($v) => $v !== '')); // remove vazias
+    // PHP 7.2 compatível: substituir arrow function por anonymous function
+    $options  = array_values(array_filter($options, function ($v) { return $v !== ''; })); // remove vazias
     $max_choices = max(1, (int)($_POST['max_choices'] ?? 1));
     $created_by  = $_SESSION['user_id'];
 
@@ -86,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Layout
-$prefix = '../';
+$prefix = '..//';
 $title  = 'Nova Enquete — ' . htmlspecialchars($item['descricao']);
 include __DIR__ . '/../layout/header.php';
 ?>

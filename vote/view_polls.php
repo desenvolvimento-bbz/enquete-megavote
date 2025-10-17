@@ -111,8 +111,11 @@ foreach ($polls as $p) {
     ");
     $opt->execute([$p['id']]);
     $rows   = $opt->fetchAll();
-    $labels = array_map(fn($r)=>$r['option_text'], $rows);
-    $data   = array_map(fn($r)=>(int)$r['votos'],   $rows);
+
+    // PHP 7.2: substituir arrow functions por funções anônimas
+    $labels = array_map(function ($r) { return $r['option_text']; }, $rows);
+    $data   = array_map(function ($r) { return (int)$r['votos']; }, $rows);
+
     $charts[] = [
       'poll_id' => (int)$p['id'],
       'labels'  => $labels,
@@ -122,7 +125,7 @@ foreach ($polls as $p) {
 }
 
 // Layout
-$prefix = '../';
+$prefix = '..//';
 $title  = 'Enquetes — ' . htmlspecialchars($item_descricao);
 include __DIR__ . '/../layout/header.php';
 ?>
@@ -198,8 +201,12 @@ include __DIR__ . '/../layout/header.php';
                 Você votou em:
                 <strong>
                   <?php
-                    $chosen = array_filter($options, fn($o)=> in_array($o['id'], $userVotes[$pid]));
-                    echo implode(', ', array_map(fn($o)=>htmlspecialchars($o['option_text']), $chosen));
+                    $chosen = array_filter($options, function ($o) use ($userVotes, $pid) {
+                      return in_array($o['id'], $userVotes[$pid]);
+                    });
+                    echo implode(', ', array_map(function ($o) {
+                      return htmlspecialchars($o['option_text']);
+                    }, $chosen));
                   ?>
                 </strong>
               </p>
@@ -236,8 +243,12 @@ include __DIR__ . '/../layout/header.php';
                   Você votou em:
                   <strong>
                     <?php
-                      $chosen = array_filter($options, fn($o)=> in_array($o['id'], $userVotes[$pid]));
-                      echo implode(', ', array_map(fn($o)=>htmlspecialchars($o['option_text']), $chosen));
+                      $chosen = array_filter($options, function ($o) use ($userVotes, $pid) {
+                        return in_array($o['id'], $userVotes[$pid]);
+                      });
+                      echo implode(', ', array_map(function ($o) {
+                        return htmlspecialchars($o['option_text']);
+                      }, $chosen));
                     ?>
                   </strong>
                 </p>

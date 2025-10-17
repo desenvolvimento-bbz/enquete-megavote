@@ -65,7 +65,12 @@ $detalhes = [
     'Variáveis removidas:' => implode(', ', $variaveisRemovidas)
 ];
 
-logAction('Sorteio limpo', implode(' | ', array_map(fn($k, $v) => "{$k} {$v}", array_keys($detalhes), $detalhes)));
+// PHP 7.2: substituir arrow function por iteração clássica
+$detalhesJoin = [];
+foreach ($detalhes as $k => $v) {
+    $detalhesJoin[] = $k . ' ' . $v;
+}
+logAction('Sorteio limpo', implode(' | ', $detalhesJoin));
 
 // Opcional: Limpar arquivos de upload antigos (manter apenas os últimos 10)
 try {
@@ -106,4 +111,3 @@ $_SESSION['success'] = 'Sorteio limpo com sucesso! Todos os dados foram removido
 header('Location: painel.php');
 exit;
 ?>
-
